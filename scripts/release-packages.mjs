@@ -33,6 +33,10 @@ export const RELEASE_PACKAGES = [
     directory: "cache-conformance",
     name: "@pegma/cache-conformance",
   },
+  {
+    directory: "cache-redis",
+    name: "@pegma/cache-redis",
+  },
 ];
 
 const RELEASE_NAMES = new Set(RELEASE_PACKAGES.map(({ name }) => name));

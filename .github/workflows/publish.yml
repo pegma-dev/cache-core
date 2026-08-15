@@ -17,6 +17,16 @@ concurrency:
 jobs:
   prepare:
     runs-on: ubuntu-latest
+    services:
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 16379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     env:
       RELEASE_TAG: ${{ github.event.release.tag_name }}
       RELEASE_PRERELEASE: ${{ github.event.release.prerelease }}
@@ -70,6 +80,9 @@ jobs:
 
       - name: Run tests
         run: pnpm test
+
+      - name: Run Redis adapter tests
+        run: pnpm run test:redis
 
       - name: Prepare and verify release tarballs
         run: pnpm run release:pack -- --require-clean --require-main-ancestor --require-release-tag --expected-release-commit "${RELEASE_COMMIT}" --output .release

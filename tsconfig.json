@@ -2,6 +2,7 @@
   "files": [],
   "references": [
     { "path": "./packages/cache-core" },
-    { "path": "./packages/cache-conformance" }
+    { "path": "./packages/cache-conformance" },
+    { "path": "./packages/cache-redis" }
   ]
 }
