@@ -80,9 +80,8 @@ function redisClusterSlot(wireKey: string): number {
     const end = wireKey.indexOf("}", start + 1);
     if (end > start + 1) {
       return (
-        redisCrc16(
-          new TextEncoder().encode(wireKey.slice(start + 1, end)),
-        ) & 0x3fff
+        redisCrc16(new TextEncoder().encode(wireKey.slice(start + 1, end))) &
+        0x3fff
       );
     }
   }
