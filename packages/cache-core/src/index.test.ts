@@ -178,6 +178,55 @@ describe("createMemoryCacheStore", () => {
       value: "v2",
     });
   });
+
+  it("keeps the previous entry indexed when encode throws", async () => {
+    const clock = createControllableClock(START);
+    const store = createMemoryCacheStore({ clock });
+    const codec = jsonCodec<string>();
+    const address = { namespace: "tags", key: "row" };
+    await store.set(address, "v1", codec, { tags: ["group"] });
+    const exploding: typeof codec = {
+      encode() {
+        throw new Error("cannot encode");
+      },
+      decode() {
+        throw new Error("unused");
+      },
+    };
+    await expect(
+      store.set(address, "v2", exploding, { tags: ["other"] }),
+    ).rejects.toThrow("cannot encode");
+    expect(await store.get(address, codec)).toMatchObject({
+      status: "hit",
+      value: "v1",
+    });
+    expect(await store.invalidateTags(["group"])).toEqual({
+      status: "hit",
+      value: 1,
+    });
+    expect(await store.get(address, codec)).toEqual({ status: "miss" });
+  });
+
+  it("treats delete of an expired entry as a miss and purges it", async () => {
+    const clock = createControllableClock(START);
+    const store = createMemoryCacheStore({ clock });
+    const codec = jsonCodec<string>();
+    const address = { namespace: "ttl", key: "stale" };
+    await store.set(address, "old", codec, {
+      ttl: { absoluteMs: 1_000 },
+      tags: ["group"],
+    });
+    clock.advance(1_000);
+    expect(await store.delete(address)).toEqual({
+      status: "hit",
+      value: false,
+    });
+    expect(await store.get(address, codec)).toEqual({ status: "miss" });
+    expect(await store.invalidateTags(["group"])).toEqual({
+      status: "hit",
+      value: 0,
+    });
+  });
 });
 
 describe("runGetOrCompute fallback isolation", () => {

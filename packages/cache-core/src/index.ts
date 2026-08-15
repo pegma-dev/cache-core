@@ -413,18 +413,23 @@ export function createMemoryCacheStore(options: CacheDependencies): CacheStore {
     }
   }
 
+  function isExpired(entry: MemoryEntry, nowMs: number): boolean {
+    return entry.expiresAtMs !== null && nowMs >= entry.expiresAtMs;
+  }
+
+  function purge(formatted: string, entry: MemoryEntry): void {
+    forgetTags(formatted, entry.tags);
+    entries.delete(formatted);
+  }
+
   const store: CacheStore = {
     async get(key, codec) {
       const formatted = formatCacheKey(key);
       const entry = entries.get(formatted);
       const nowMs = clockMs(clock);
-      if (
-        entry === undefined ||
-        (entry.expiresAtMs !== null && nowMs >= entry.expiresAtMs)
-      ) {
+      if (entry === undefined || isExpired(entry, nowMs)) {
         if (entry !== undefined) {
-          forgetTags(formatted, entry.tags);
-          entries.delete(formatted);
+          purge(formatted, entry);
         }
         logOutcome(logger, "miss", key.namespace);
         return { status: "miss" };
@@ -445,8 +450,7 @@ export function createMemoryCacheStore(options: CacheDependencies): CacheStore {
         logOutcome(logger, "hit", key.namespace);
         return hit;
       } catch (error) {
-        forgetTags(formatted, entry.tags);
-        entries.delete(formatted);
+        purge(formatted, entry);
         logOutcome(logger, "error", key.namespace);
         return { status: "error", error };
       }
@@ -455,6 +459,7 @@ export function createMemoryCacheStore(options: CacheDependencies): CacheStore {
     async set(key, value, codec, setOptions) {
       const formatted = formatCacheKey(key);
       const nowMs = clockMs(clock);
+      const bytes = codec.encode(value).slice();
       const previous = entries.get(formatted);
       if (previous !== undefined) {
         forgetTags(formatted, previous.tags);
@@ -462,7 +467,7 @@ export function createMemoryCacheStore(options: CacheDependencies): CacheStore {
       const tags = [...(setOptions?.tags ?? [])];
       const deadlines = ttlDeadlines(nowMs, setOptions?.ttl);
       entries.set(formatted, {
-        bytes: codec.encode(value).slice(),
+        bytes,
         tags,
         lastComputeMs: setOptions?.lastComputeMs ?? 0,
         ...deadlines,
@@ -477,9 +482,9 @@ export function createMemoryCacheStore(options: CacheDependencies): CacheStore {
       if (entry === undefined) {
         return { status: "hit", value: false };
       }
-      forgetTags(formatted, entry.tags);
-      entries.delete(formatted);
-      return { status: "hit", value: true };
+      const expired = isExpired(entry, clockMs(clock));
+      purge(formatted, entry);
+      return { status: "hit", value: !expired };
     },
 
     async getOrCompute<T>(
