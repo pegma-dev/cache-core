@@ -236,19 +236,22 @@ export function createRedisCacheStore(
     async get(key, codec) {
       const formatted = formatCacheKey(key);
       try {
-        let entry: RedisEntry | null;
+        const raw = await redis.getBuffer(entryKey(formatted));
+        if (raw === null) {
+          logOutcome(logger, "miss", key.namespace);
+          return { status: "miss" };
+        }
+        let entry: RedisEntry;
         try {
-          entry = await readEntry(formatted);
+          entry = decodeEnvelope(raw);
         } catch (error) {
           await redis.del(entryKey(formatted));
           logOutcome(logger, "error", key.namespace);
           return { status: "error", error };
         }
         const nowMs = clockMs(clock);
-        if (entry === null || isExpired(entry, nowMs)) {
-          if (entry !== null) {
-            await purge(formatted, entry);
-          }
+        if (isExpired(entry, nowMs)) {
+          await purge(formatted, entry);
           logOutcome(logger, "miss", key.namespace);
           return { status: "miss" };
         }

@@ -1,5 +1,5 @@
-import Redis from "ioredis";
-import { afterAll, describe, expect, it } from "vitest";
+import { Redis } from "ioredis";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createControllableClock, jsonCodec } from "@pegma/cache-core";
 import { conformanceCases } from "@pegma/cache-conformance";
@@ -12,7 +12,10 @@ const START = "2026-08-15T16:00:00.000Z";
 
 const redis = new Redis(REDIS_URL, {
   maxRetriesPerRequest: 1,
-  enableOfflineQueue: false,
+});
+
+beforeAll(async () => {
+  await redis.ping();
 });
 
 afterAll(async () => {

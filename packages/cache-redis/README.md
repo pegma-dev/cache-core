@@ -9,7 +9,7 @@ Intended future hosts: RetireGolden.org and Exsimplify.
 ```ts
 import { createControllableClock, jsonCodec } from "@pegma/cache-core";
 import { createRedisCacheStore } from "@pegma/cache-redis";
-import Redis from "ioredis";
+import { Redis } from "ioredis";
 
 const clock = createControllableClock("2026-08-15T16:00:00.000Z");
 const cache = createRedisCacheStore({
