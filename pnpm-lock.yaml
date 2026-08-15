@@ -21,6 +21,25 @@ importers:
         specifier: ^4.1.10
         version: 4.1.10(@types/node@26.2.0)(vite@8.2.1(@types/node@26.2.0))
 
+  packages/cache-azure-redis:
+    dependencies:
+      '@pegma/cache-core':
+        specifier: 0.1.0
+        version: link:../cache-core
+      '@pegma/cache-redis':
+        specifier: 0.1.0
+        version: link:../cache-redis
+      '@pegma/spine':
+        specifier: 0.1.2
+        version: 0.1.2
+    devDependencies:
+      '@pegma/cache-conformance':
+        specifier: 0.1.0
+        version: link:../cache-conformance
+      ioredis:
+        specifier: ^5.8.2
+        version: 5.11.1
+
   packages/cache-conformance:
     dependencies:
       '@pegma/cache-core':

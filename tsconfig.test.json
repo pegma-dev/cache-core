@@ -12,6 +12,7 @@
     "packages/*/src/**/*.test.ts",
     "tests/**/*.ts",
     "vitest.config.ts",
-    "vitest.redis.config.ts"
+    "vitest.redis.config.ts",
+    "vitest.azure-redis.config.ts"
   ]
 }
