@@ -41,6 +41,10 @@ export const RELEASE_PACKAGES = [
     directory: "cache-azure-redis",
     name: "@pegma/cache-azure-redis",
   },
+  {
+    directory: "cache-elasticache",
+    name: "@pegma/cache-elasticache",
+  },
 ];
 
 const RELEASE_NAMES = new Set(RELEASE_PACKAGES.map(({ name }) => name));

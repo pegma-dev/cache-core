@@ -8,6 +8,7 @@ export default defineConfig({
       "**/node_modules/**",
       "packages/cache-redis/**",
       "packages/cache-azure-redis/**",
+      "packages/cache-elasticache/**",
     ],
   },
 });

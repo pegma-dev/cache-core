@@ -13,6 +13,7 @@
     "tests/**/*.ts",
     "vitest.config.ts",
     "vitest.redis.config.ts",
-    "vitest.azure-redis.config.ts"
+    "vitest.azure-redis.config.ts",
+    "vitest.elasticache.config.ts"
   ]
 }
