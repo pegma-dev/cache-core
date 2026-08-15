@@ -177,8 +177,9 @@ describe("Upstash Redis adapter", () => {
       smembers: (key) => redis.smembers(key),
       ping: () => redis.ping(),
       async eval(script, keys, args) {
-        seen = { keys, args };
-        return redis.eval(script, keys, args);
+        const argv = [...args];
+        seen = { keys, args: argv };
+        return redis.eval(script, keys, argv);
       },
     };
     const store = createUpstashRedisCacheStore({
