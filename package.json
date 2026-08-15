@@ -20,7 +20,8 @@
     "release:publish": "node scripts/release-packages.mjs publish",
     "test": "pnpm run build && vitest run",
     "test:redis": "pnpm run build && vitest run --config vitest.redis.config.ts",
-    "test:azure-redis": "pnpm run build && vitest run --config vitest.azure-redis.config.ts"
+    "test:azure-redis": "pnpm run build && vitest run --config vitest.azure-redis.config.ts",
+    "test:elasticache": "pnpm run build && vitest run --config vitest.elasticache.config.ts"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",

@@ -2,9 +2,10 @@
 
 ## Status
 
-**Stage:** Phase 3 — Azure Cache for Redis adapter, in-tree, unpublished.
-`@pegma/cache-core`, `@pegma/cache-conformance`, `@pegma/cache-redis`, and
-`@pegma/cache-azure-redis` are `0.1.0` and not published.
+**Stage:** Phase 4 — Amazon ElastiCache adapter, in-tree, unpublished.
+`@pegma/cache-core`, `@pegma/cache-conformance`, `@pegma/cache-redis`,
+`@pegma/cache-azure-redis`, and `@pegma/cache-elasticache` are `0.1.0`
+and not published.
 
 **License:** MIT
 
@@ -96,15 +97,15 @@ those land with a later adapter, named, tested, and never smuggled into
 ### No adapter package without a consumer
 
 The Pegma rule: do not create an adapter package until implementation
-begins and a named consumer exists. Phase 2 created `@pegma/cache-redis`
-and Phase 3 creates `@pegma/cache-azure-redis` because RetireGolden.org
-and Exsimplify are named future hosts. `cache-elasticache` and
-`cache-upstash-redis` wait.
+begins and a named consumer exists. Phase 2 created `@pegma/cache-redis`,
+Phase 3 created `@pegma/cache-azure-redis`, and Phase 4 creates
+`@pegma/cache-elasticache` because RetireGolden.org and Exsimplify are
+named future hosts. `cache-upstash-redis` waits.
 
 ### Vendor clients stay behind the port
 
 Application code depends on `CacheStore`. An adapter may import `ioredis`
-or the Azure SDK; a host must not. The memory store exists so tests and
+or a vendor SDK; a host must not. The memory store exists so tests and
 local composition never take a network client.
 
 ## Scope
@@ -127,8 +128,8 @@ local composition never take a network client.
 - **Unbounded local memory fallbacks when a remote cache is down.**
   Fail-open computes; it does not accumulate.
 - **Vendor clients in application code.**
-- **ElastiCache / Upstash packages in Phase 3.**
-  Those remain later phases.
+- **Upstash package in Phase 4.**
+  That remains a later phase.
 
 ## Package architecture
 
@@ -160,15 +161,19 @@ hosts. Must pass `@pegma/cache-conformance`. Expiry stays on the injected
 Clock; tag invalidation uses a sidecar index and never implies a
 multi-key command.
 
-### Phase 3 — Azure Cache for Redis (this PR)
+### Phase 3 — Azure Cache for Redis
 
 Thin adapter over the same port. Azure Cache for Redis speaks Redis, so
 `@pegma/cache-azure-redis` composes `@pegma/cache-redis` rather than
 wrapping a data-plane Azure SDK. Real backend, same suite.
 
-### Phase 4 — Amazon ElastiCache
+### Phase 4 — Amazon ElastiCache (this PR)
 
-Thin adapter. Cluster hash-tag behaviour is proven here, not implied.
+Thin adapter over the same port. ElastiCache speaks Redis, so
+`@pegma/cache-elasticache` composes `@pegma/cache-redis` rather than
+wrapping a data-plane AWS SDK. Cluster hash-tag behaviour is proven
+here, not implied: `formatCacheKey` embeds `{tag}`, and tagged wire
+keys share a Redis Cluster slot. Real backend, same suite.
 
 ### Phase 5 — Upstash Redis
 

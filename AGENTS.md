@@ -76,7 +76,9 @@ Work on a `claude/*` branch and open a pull request. The gate is
 and 24. Changes to `@pegma/cache-redis` also run `pnpm run test:redis`
 against a real Redis (CI starts one; locally `redis-server` on port 16379
 or a service already bound there). Changes to `@pegma/cache-azure-redis`
-also run `pnpm run test:azure-redis` against the same Redis.
+also run `pnpm run test:azure-redis` against the same Redis. Changes to
+`@pegma/cache-elasticache` also run `pnpm run test:elasticache` against
+the same Redis.
 
 Publishing is trusted-publisher only; no tokens exist. A release starts from a
 protected signed annotated `vX.Y.Z` tag already on `origin/main`, followed by
@@ -84,10 +86,11 @@ protected signed annotated `vX.Y.Z` tag already on `origin/main`, followed by
 
 ## Where things stand
 
-Phase 3: `@pegma/cache-core`, `@pegma/cache-conformance`,
-`@pegma/cache-redis`, and `@pegma/cache-azure-redis` (thin composition of
-the generic Redis adapter). ElastiCache / Upstash adapters are later
-phases — do not create those packages here yet.
+Phase 4: `@pegma/cache-core`, `@pegma/cache-conformance`,
+`@pegma/cache-redis`, `@pegma/cache-azure-redis`, and
+`@pegma/cache-elasticache` (thin composition of the generic Redis
+adapter; cluster hash-tag colocation is proven). The Upstash adapter is
+a later phase — do not create that package here yet.
 
 Siblings: [spine](https://github.com/pegma-dev/spine),
 [storage-core](https://github.com/pegma-dev/storage-core),
