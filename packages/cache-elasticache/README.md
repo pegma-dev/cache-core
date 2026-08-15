@@ -16,6 +16,7 @@ import { Redis } from "ioredis";
 const clock = createControllableClock("2026-08-15T16:00:00.000Z");
 const cache = createElastiCacheCacheStore({
   clock,
+  // Primary endpoint. A cluster-mode configuration endpoint needs Redis.Cluster.
   redis: new Redis({
     host: process.env.ELASTICACHE_HOST ?? "127.0.0.1",
     port: Number(process.env.ELASTICACHE_PORT ?? "6379"),
@@ -37,8 +38,10 @@ const result = await cache.getOrCompute(
 ```
 
 Hosts depend on `CacheStore`. Construct the Redis client at the composition
-root — typically TLS to the primary or configuration endpoint, with the
-ElastiCache AUTH token as the password — and hand it to this adapter.
+root — typically TLS to the primary endpoint, with the ElastiCache AUTH
+token as the password — and hand it to this adapter. A cluster-mode
+configuration endpoint is not a standalone host: inject `Redis.Cluster` (or
+another cluster-aware client) so slot redirects are handled there.
 Application code does not import `ioredis` or an AWS data-plane SDK.
 
 There is no ElastiCache data-plane Redis SDK to wrap. This factory forwards
