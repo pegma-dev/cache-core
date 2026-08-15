@@ -78,7 +78,9 @@ against a real Redis (CI starts one; locally `redis-server` on port 16379
 or a service already bound there). Changes to `@pegma/cache-azure-redis`
 also run `pnpm run test:azure-redis` against the same Redis. Changes to
 `@pegma/cache-elasticache` also run `pnpm run test:elasticache` against
-the same Redis.
+the same Redis. Changes to `@pegma/cache-upstash-redis` also run
+`pnpm run test:upstash-redis` against the same Redis through an injected
+client that matches the Upstash REST command surface.
 
 Publishing is trusted-publisher only; no tokens exist. A release starts from a
 protected signed annotated `vX.Y.Z` tag already on `origin/main`, followed by
@@ -86,11 +88,11 @@ protected signed annotated `vX.Y.Z` tag already on `origin/main`, followed by
 
 ## Where things stand
 
-Phase 4: `@pegma/cache-core`, `@pegma/cache-conformance`,
-`@pegma/cache-redis`, `@pegma/cache-azure-redis`, and
-`@pegma/cache-elasticache` (thin composition of the generic Redis
-adapter; cluster hash-tag colocation is proven). The Upstash adapter is
-a later phase — do not create that package here yet.
+Phase 5: `@pegma/cache-core`, `@pegma/cache-conformance`,
+`@pegma/cache-redis`, `@pegma/cache-azure-redis`,
+`@pegma/cache-elasticache`, and `@pegma/cache-upstash-redis` (Upstash
+REST/SDK client, reusing the generic Redis store after adapting the HTTP
+command surface). Do not create further adapter packages here.
 
 Siblings: [spine](https://github.com/pegma-dev/spine),
 [storage-core](https://github.com/pegma-dev/storage-core),
