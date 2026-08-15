@@ -46,6 +46,8 @@ unbounded in-process map as a fallback when the remote cache is down.
 **No vendor clients in application code.** Adapters wrap Redis, Azure Cache,
 ElastiCache, or Upstash. Hosts depend on `CacheStore`. Do not create an
 adapter package until implementation begins and a named consumer exists.
+`@pegma/cache-redis` exists because RetireGolden.org and Exsimplify are
+named future hosts.
 
 **This is not durable state.** Persistence, optimistic concurrency, and
 transactions belong in `@pegma/storage-core`. A cache miss is not data loss.
@@ -71,7 +73,9 @@ when pnpm set it, or pack/publish silently go through pnpm.
 
 Work on a `claude/*` branch and open a pull request. The gate is
 `pnpm run format:check`, `pnpm run check`, `pnpm test` — all three, on Node 22
-and 24.
+and 24. Changes to `@pegma/cache-redis` also run `pnpm run test:redis`
+against a real Redis (CI starts one; locally `redis-server` on port 16379
+or a service already bound there).
 
 Publishing is trusted-publisher only; no tokens exist. A release starts from a
 protected signed annotated `vX.Y.Z` tag already on `origin/main`, followed by
@@ -79,10 +83,9 @@ protected signed annotated `vX.Y.Z` tag already on `origin/main`, followed by
 
 ## Where things stand
 
-Phase 1: `@pegma/cache-core` (ports, codecs, `formatCacheKey`, single-flight
-helper, in-memory store) and `@pegma/cache-conformance` (executable suite).
-Redis / Azure Redis / ElastiCache / Upstash adapters are later phases — do
-not create those packages here yet.
+Phase 2: `@pegma/cache-core`, `@pegma/cache-conformance`, and
+`@pegma/cache-redis` (generic Redis adapter). Azure Redis / ElastiCache /
+Upstash adapters are later phases — do not create those packages here yet.
 
 Siblings: [spine](https://github.com/pegma-dev/spine),
 [storage-core](https://github.com/pegma-dev/storage-core),

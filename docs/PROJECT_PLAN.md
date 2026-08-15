@@ -2,8 +2,9 @@
 
 ## Status
 
-**Stage:** Phase 1 — ports, in-memory store, and the conformance suite.
-Nothing is published. (`0.1.0`, unpublished.)
+**Stage:** Phase 2 — generic Redis adapter, in-tree, unpublished.
+`@pegma/cache-core`, `@pegma/cache-conformance`, and `@pegma/cache-redis`
+are `0.1.0` and not published.
 
 **License:** MIT
 
@@ -94,10 +95,10 @@ those land with a later adapter, named, tested, and never smuggled into
 
 ### No adapter package without a consumer
 
-The Pegma rule: do not create `cache-redis`, `cache-azure-redis`,
-`cache-elasticache`, or `cache-upstash-redis` until implementation begins
-and a named consumer exists. Phase 1 ships the port, the memory store, and
-the suite those adapters will have to pass.
+The Pegma rule: do not create an adapter package until implementation
+begins and a named consumer exists. Phase 2 creates `@pegma/cache-redis`
+because RetireGolden.org and Exsimplify are named future hosts.
+`cache-azure-redis`, `cache-elasticache`, and `cache-upstash-redis` wait.
 
 ### Vendor clients stay behind the port
 
@@ -125,7 +126,8 @@ local composition never take a network client.
 - **Unbounded local memory fallbacks when a remote cache is down.**
   Fail-open computes; it does not accumulate.
 - **Vendor clients in application code.**
-- **Redis / Azure Redis / ElastiCache / Upstash packages in Phase 1.**
+- **Azure Redis / ElastiCache / Upstash packages in Phase 2.**
+  Those remain later phases.
 
 ## Package architecture
 
@@ -143,17 +145,19 @@ Dependencies: `@pegma/spine` pinned exactly. Conformance pins
 
 ## Delivery phases
 
-### Phase 1 — port, memory store, conformance (this PR)
+### Phase 1 — port, memory store, conformance
 
 `CacheStore`, codecs, `formatCacheKey`, single-flight `getOrCompute`
 helper, in-memory store, and the suite cases listed above. The in-memory
 store is the first adapter and must pass.
 
-### Phase 2 — generic Redis adapter
+### Phase 2 — generic Redis adapter (this PR)
 
 `@pegma/cache-redis` against a real empty Redis (or a faithful local
-server). Created only when implementation begins and a consumer exists.
-Must pass `@pegma/cache-conformance`.
+server). Created because RetireGolden.org and Exsimplify are named future
+hosts. Must pass `@pegma/cache-conformance`. Expiry stays on the injected
+Clock; tag invalidation uses a sidecar index and never implies a
+multi-key command.
 
 ### Phase 3 — Azure Cache for Redis
 

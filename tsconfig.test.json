@@ -10,7 +10,8 @@
   },
   "include": [
     "packages/*/src/**/*.test.ts",
-    "tests/**/*.test.ts",
-    "vitest.config.ts"
+    "tests/**/*.ts",
+    "vitest.config.ts",
+    "vitest.redis.config.ts"
   ]
 }
