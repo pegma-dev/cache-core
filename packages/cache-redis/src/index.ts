@@ -28,6 +28,15 @@ export interface RedisCacheClient {
   srem(key: string, ...members: string[]): Promise<number>;
   smembers(key: string): Promise<string[]>;
   ping(): Promise<string>;
+  /**
+   * Single-key script runner. Used so a sliding refresh can replace only the
+   * envelope it read, without a multi-key command.
+   */
+  eval(
+    script: string,
+    numKeys: number,
+    ...args: readonly (string | Buffer | number)[]
+  ): Promise<unknown>;
 }
 
 export interface RedisCacheStoreOptions extends CacheDependencies {
@@ -42,6 +51,15 @@ export interface RedisCacheStoreOptions extends CacheDependencies {
 
 const ENVELOPE_VERSION = 1;
 const DEFAULT_PREFIX = "pegma-cache:";
+
+/** Replace KEYS[1] only when it still equals the envelope this get read. */
+const COMPARE_AND_SET = `
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+  redis.call('SET', KEYS[1], ARGV[2])
+  return 1
+end
+return 0
+`;
 
 interface RedisEntry {
   bytes: Uint8Array;
@@ -227,6 +245,21 @@ export function createRedisCacheStore(
     await redis.set(entryKey(formatted), encodeEnvelope(entry));
   }
 
+  async function compareAndSetEntry(
+    formatted: string,
+    expected: Uint8Array,
+    next: RedisEntry,
+  ): Promise<boolean> {
+    const replaced = await redis.eval(
+      COMPARE_AND_SET,
+      1,
+      entryKey(formatted),
+      Buffer.from(expected),
+      encodeEnvelope(next),
+    );
+    return replaced === 1;
+  }
+
   async function purge(formatted: string, entry: RedisEntry): Promise<void> {
     await redis.del(entryKey(formatted));
     await forgetTags(formatted, entry.tags);
@@ -256,7 +289,7 @@ export function createRedisCacheStore(
           return { status: "miss" };
         }
         if (refreshSliding(entry, nowMs)) {
-          await writeEntry(formatted, entry);
+          await compareAndSetEntry(formatted, raw, entry);
         }
         try {
           const value = codec.decode(entry.bytes);
@@ -370,13 +403,17 @@ export function createRedisCacheStore(
               entry = null;
             }
             if (entry === null) {
+              await redis.srem(tagKey(tag), formatted);
+              continue;
+            }
+            if (!entry.tags.includes(tag)) {
+              await redis.srem(tagKey(tag), formatted);
               continue;
             }
             await redis.del(entryKey(formatted));
             await forgetTags(formatted, entry.tags);
             removed += 1;
           }
-          await redis.del(tagKey(tag));
         }
         return { status: "hit", value: removed };
       } catch (error) {

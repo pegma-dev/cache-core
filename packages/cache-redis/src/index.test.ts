@@ -29,6 +29,28 @@ function nextPrefix(): string {
   return `pegma-cache:t${String(process.pid)}:${String(prefixCounter)}:`;
 }
 
+function proxyRedis(
+  client: Redis,
+  hooks: {
+    afterGetBuffer?: () => Promise<void>;
+  } = {},
+): RedisCacheClient {
+  return {
+    async getBuffer(key) {
+      const raw = await client.getBuffer(key);
+      await hooks.afterGetBuffer?.();
+      return raw;
+    },
+    set: (key, value) => client.set(key, value),
+    del: (...keys) => client.del(...keys),
+    sadd: (key, ...members) => client.sadd(key, ...members),
+    srem: (key, ...members) => client.srem(key, ...members),
+    smembers: (key) => client.smembers(key),
+    ping: () => client.ping(),
+    eval: (script, numKeys, ...args) => client.eval(script, numKeys, ...args),
+  };
+}
+
 function unavailableRedis(): RedisCacheClient {
   const down = new Error("cache backend unavailable");
   const reject = async (): Promise<never> => {
@@ -42,6 +64,7 @@ function unavailableRedis(): RedisCacheClient {
     srem: reject,
     smembers: reject,
     ping: reject,
+    eval: reject,
   };
 }
 
@@ -218,6 +241,98 @@ describe("Redis adapter guarantees", () => {
     expect(
       await redis.getBuffer(`${keyPrefix}e:{user-1}sessions:one`),
     ).not.toBeNull();
+  });
+
+  it("does not let a sliding refresh restore a concurrently written value", async () => {
+    const clock = createControllableClock(START);
+    const keyPrefix = nextPrefix();
+    const codec = jsonCodec<string>();
+    const address = { namespace: "ttl", key: "race" };
+    const writer = createRedisCacheStore({ clock, redis, keyPrefix });
+    await writer.set(address, "old", codec, { ttl: { slidingMs: 1_000 } });
+    clock.advance(600);
+
+    let releaseRead = (): void => {};
+    const holdRead = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    let sawRead = (): void => {};
+    const startedRead = new Promise<void>((resolve) => {
+      sawRead = resolve;
+    });
+    const reader = createRedisCacheStore({
+      clock,
+      redis: proxyRedis(redis, {
+        async afterGetBuffer() {
+          sawRead();
+          await holdRead;
+        },
+      }),
+      keyPrefix,
+    });
+
+    const pending = reader.get(address, codec);
+    await startedRead;
+    await writer.set(address, "new", codec, { ttl: { slidingMs: 1_000 } });
+    releaseRead();
+    await pending;
+    expect(await writer.get(address, codec)).toMatchObject({
+      status: "hit",
+      value: "new",
+    });
+  });
+
+  it("does not delete a winning entry when a stale tag is invalidated", async () => {
+    const clock = createControllableClock(START);
+    const keyPrefix = nextPrefix();
+    const codec = jsonCodec<string>();
+    const address = { namespace: "tags", key: "race" };
+
+    let reads = 0;
+    let releaseReads = (): void => {};
+    const bothRead = new Promise<void>((resolve) => {
+      releaseReads = resolve;
+    });
+    const afterGetBuffer = async (): Promise<void> => {
+      reads += 1;
+      if (reads === 2) {
+        releaseReads();
+      }
+      await bothRead;
+    };
+
+    const first = createRedisCacheStore({
+      clock,
+      redis: proxyRedis(redis, { afterGetBuffer }),
+      keyPrefix,
+    });
+    const second = createRedisCacheStore({
+      clock,
+      redis: proxyRedis(redis, { afterGetBuffer }),
+      keyPrefix,
+    });
+
+    await Promise.all([
+      first.set(address, "alpha", codec, { tags: ["alpha"] }),
+      second.set(address, "beta", codec, { tags: ["beta"] }),
+    ]);
+
+    const observer = createRedisCacheStore({ clock, redis, keyPrefix });
+    const current = await observer.get(address, codec);
+    expect(current.status).toBe("hit");
+    if (current.status !== "hit") {
+      return;
+    }
+    const winner = current.value;
+    const staleTag = winner === "alpha" ? "beta" : "alpha";
+    expect(await observer.invalidateTags([staleTag])).toEqual({
+      status: "hit",
+      value: 0,
+    });
+    expect(await observer.get(address, codec)).toMatchObject({
+      status: "hit",
+      value: winner,
+    });
   });
 
   it("rejects a keyPrefix that would steal the hash tag", () => {
