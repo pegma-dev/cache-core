@@ -25,6 +25,7 @@ pnpm test
 pnpm run test:redis
 pnpm run test:azure-redis
 pnpm run test:elasticache
+pnpm run test:upstash-redis
 pnpm run format:check
 ```
 

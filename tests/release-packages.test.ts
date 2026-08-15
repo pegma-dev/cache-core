@@ -40,6 +40,7 @@ describe("release package metadata", () => {
       "@pegma/cache-redis",
       "@pegma/cache-azure-redis",
       "@pegma/cache-elasticache",
+      "@pegma/cache-upstash-redis",
     ]);
   });
 
@@ -63,6 +64,7 @@ describe("release package metadata", () => {
       { name: "@pegma/cache-redis", version: "0.1.0" },
       { name: "@pegma/cache-azure-redis", version: "0.1.0" },
       { name: "@pegma/cache-elasticache", version: "0.1.0" },
+      { name: "@pegma/cache-upstash-redis", version: "0.1.0" },
     ]);
     expect(manifests[1]?.dependencies?.["@pegma/cache-core"]).toBe("0.1.0");
     expect(manifests[2]?.dependencies?.["@pegma/cache-core"]).toBe("0.1.0");
@@ -70,10 +72,13 @@ describe("release package metadata", () => {
     expect(manifests[3]?.dependencies?.["@pegma/cache-redis"]).toBe("0.1.0");
     expect(manifests[4]?.dependencies?.["@pegma/cache-core"]).toBe("0.1.0");
     expect(manifests[4]?.dependencies?.["@pegma/cache-redis"]).toBe("0.1.0");
+    expect(manifests[5]?.dependencies?.["@pegma/cache-core"]).toBe("0.1.0");
+    expect(manifests[5]?.dependencies?.["@pegma/cache-redis"]).toBe("0.1.0");
     expect(manifests[0]?.dependencies?.["@pegma/spine"]).toBe("0.1.2");
     expect(manifests[2]?.dependencies?.["@pegma/spine"]).toBe("0.1.2");
     expect(manifests[3]?.dependencies?.["@pegma/spine"]).toBe("0.1.2");
     expect(manifests[4]?.dependencies?.["@pegma/spine"]).toBe("0.1.2");
+    expect(manifests[5]?.dependencies?.["@pegma/spine"]).toBe("0.1.2");
     expect(packageVersion).toBe("0.1.0");
   });
 
@@ -173,6 +178,28 @@ describe("release package metadata", () => {
         specifier: ^5.8.2
         version: 5.8.2
 
+  packages/cache-upstash-redis:
+    dependencies:
+      '@pegma/cache-core':
+        specifier: 0.1.0
+        version: link:../cache-core
+      '@pegma/cache-redis':
+        specifier: 0.1.0
+        version: link:../cache-redis
+      '@pegma/spine':
+        specifier: 0.1.2
+        version: 0.1.2
+      '@upstash/redis':
+        specifier: ^1.38.2
+        version: 1.38.2
+    devDependencies:
+      '@pegma/cache-conformance':
+        specifier: 0.1.0
+        version: link:../cache-conformance
+      ioredis:
+        specifier: ^5.8.2
+        version: 5.8.2
+
 packages:
   prettier@3.9.6:
     resolution: {integrity: sha512-example}
@@ -184,6 +211,7 @@ packages:
       "packages/cache-redis",
       "packages/cache-azure-redis",
       "packages/cache-elasticache",
+      "packages/cache-upstash-redis",
     ]);
     expect(importers["packages/cache-core"]).toEqual({
       dependencies: {
@@ -305,6 +333,41 @@ packages:
         "^5.8.2",
       ),
     ).toBe(true);
+    expect(
+      live["packages/cache-upstash-redis"]?.dependencies?.[
+        "@pegma/cache-redis"
+      ],
+    ).toEqual({
+      specifier: "0.1.0",
+      version: "link:../cache-redis",
+    });
+    expect(
+      lockDependencyMatches(
+        live["packages/cache-upstash-redis"]?.dependencies?.["@pegma/spine"],
+        "0.1.2",
+      ),
+    ).toBe(true);
+    expect(
+      lockDependencyMatches(
+        live["packages/cache-upstash-redis"]?.devDependencies?.[
+          "@pegma/cache-conformance"
+        ],
+        "0.1.0",
+        { workspace: true },
+      ),
+    ).toBe(true);
+    expect(
+      lockDependencyMatches(
+        live["packages/cache-upstash-redis"]?.dependencies?.["@upstash/redis"],
+        "^1.38.2",
+      ),
+    ).toBe(true);
+    expect(
+      lockDependencyMatches(
+        live["packages/cache-upstash-redis"]?.devDependencies?.ioredis,
+        "^5.8.2",
+      ),
+    ).toBe(true);
   });
 
   it("matches each lockfile dependency to its own specifier and resolved version", () => {
@@ -390,6 +453,7 @@ describe("release source authentication", () => {
     expect(prepare).toContain("pnpm run test:redis");
     expect(prepare).toContain("pnpm run test:azure-redis");
     expect(prepare).toContain("pnpm run test:elasticache");
+    expect(prepare).toContain("pnpm run test:upstash-redis");
     expect(prepare).toContain("16379:6379");
     expect(publish).toContain("id-token: write");
     expect(publish).not.toContain("npm ci");

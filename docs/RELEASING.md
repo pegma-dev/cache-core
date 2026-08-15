@@ -1,8 +1,8 @@
 # Release operations
 
 `@pegma/cache-core`, `@pegma/cache-conformance`, `@pegma/cache-redis`,
-`@pegma/cache-azure-redis`, and `@pegma/cache-elasticache` publish only
-from a stable GitHub release.
+`@pegma/cache-azure-redis`, `@pegma/cache-elasticache`, and
+`@pegma/cache-upstash-redis` publish only from a stable GitHub release.
 Merging a pull request never publishes, and the workflow has no
 manual-dispatch or npm-token fallback.
 
@@ -11,10 +11,11 @@ manual-dispatch or npm-token fallback.
 Before the first release through this workflow:
 
 - configure `@pegma/cache-core`, `@pegma/cache-conformance`,
-  `@pegma/cache-redis`, `@pegma/cache-azure-redis`, and
-  `@pegma/cache-elasticache` on npm with the GitHub Actions trusted
-  publisher `pegma-dev/cache-core`, workflow `publish.yml`, environment
-  `npm-publish`, and allowed action `npm publish`;
+  `@pegma/cache-redis`, `@pegma/cache-azure-redis`,
+  `@pegma/cache-elasticache`, and `@pegma/cache-upstash-redis` on npm
+  with the GitHub Actions trusted publisher `pegma-dev/cache-core`,
+  workflow `publish.yml`, environment `npm-publish`, and allowed action
+  `npm publish`;
 - create the GitHub `npm-publish` environment. A second reviewer is not
   required under Pegma's single-maintainer policy;
 - create the repository Actions variable `RELEASE_ALLOWED_SIGNERS` containing
@@ -32,12 +33,13 @@ remaining traditional npm publish tokens.
 The version in `packages/cache-core/package.json`,
 `packages/cache-conformance/package.json`,
 `packages/cache-redis/package.json`,
-`packages/cache-azure-redis/package.json`, and
-`packages/cache-elasticache/package.json` is the release version. All
+`packages/cache-azure-redis/package.json`,
+`packages/cache-elasticache/package.json`, and
+`packages/cache-upstash-redis/package.json` is the release version. All
 public packages publish at the same version. Change it through an ordinary
 reviewed pull request and run the complete gate on Node 22 and 24,
-including `pnpm run test:redis`, `pnpm run test:azure-redis`, and
-`pnpm run test:elasticache`.
+including `pnpm run test:redis`, `pnpm run test:azure-redis`,
+`pnpm run test:elasticache`, and `pnpm run test:upstash-redis`.
 
 After that pull request is merged, create a signed annotated tag at the exact
 `origin/main` commit, push the tag, verify the fetched tag, and only then

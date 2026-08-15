@@ -90,6 +90,9 @@ jobs:
       - name: Run ElastiCache adapter tests
         run: pnpm run test:elasticache
 
+      - name: Run Upstash Redis adapter tests
+        run: pnpm run test:upstash-redis
+
       - name: Prepare and verify release tarballs
         run: pnpm run release:pack -- --require-clean --require-main-ancestor --require-release-tag --expected-release-commit "${RELEASE_COMMIT}" --output .release
 

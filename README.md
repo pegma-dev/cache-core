@@ -38,14 +38,15 @@ and a conformance suite every adapter must pass.
 | `@pegma/cache-redis`         | Generic Redis adapter                     | 2     |
 | `@pegma/cache-azure-redis`   | Azure Cache for Redis adapter             | 3     |
 | `@pegma/cache-elasticache`   | Amazon ElastiCache adapter                | 4     |
-| `@pegma/cache-upstash-redis` | Upstash Redis adapter                     | later |
+| `@pegma/cache-upstash-redis` | Upstash Redis adapter                     | 5     |
 
 `@pegma/cache-redis` is the generic Redis adapter.
 `@pegma/cache-azure-redis` and `@pegma/cache-elasticache` are thin
 compositions of it: Azure Cache for Redis and ElastiCache speak Redis.
-Intended future hosts: RetireGolden.org and Exsimplify. Remaining
-adapter packages wait until implementation begins and a named consumer
-exists.
+`@pegma/cache-upstash-redis` wraps the Upstash serverless REST client
+and reuses that store after adapting the HTTP command surface. Intended
+future hosts: RetireGolden.org and Exsimplify. Do not create further
+adapter packages here.
 
 ## Constraint that shapes everything
 
@@ -73,12 +74,15 @@ pnpm test
 pnpm run test:redis
 pnpm run test:azure-redis
 pnpm run test:elasticache
+pnpm run test:upstash-redis
 ```
 
 `pnpm test` is the Phase 1 gate and does not need Redis. `pnpm run test:redis`,
-`pnpm run test:azure-redis`, and `pnpm run test:elasticache` start a local
-`redis-server` on port 16379 when that port is free, or use whatever is
-already listening there.
+`pnpm run test:azure-redis`, `pnpm run test:elasticache`, and
+`pnpm run test:upstash-redis` start a local `redis-server` on port 16379
+when that port is free, or use whatever is already listening there. The
+Upstash suite injects a REST-shaped client; `@upstash/redis` cannot speak
+the Redis protocol to that service.
 
 ## License
 

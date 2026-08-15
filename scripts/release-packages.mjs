@@ -45,6 +45,10 @@ export const RELEASE_PACKAGES = [
     directory: "cache-elasticache",
     name: "@pegma/cache-elasticache",
   },
+  {
+    directory: "cache-upstash-redis",
+    name: "@pegma/cache-upstash-redis",
+  },
 ];
 
 const RELEASE_NAMES = new Set(RELEASE_PACKAGES.map(({ name }) => name));

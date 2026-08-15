@@ -9,6 +9,7 @@ export default defineConfig({
       "packages/cache-redis/**",
       "packages/cache-azure-redis/**",
       "packages/cache-elasticache/**",
+      "packages/cache-upstash-redis/**",
     ],
   },
 });
