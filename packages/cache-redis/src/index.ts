@@ -106,19 +106,18 @@ function ttlDeadlines(
   return { absoluteDeadlineMs, slidingMs: sliding, expiresAtMs };
 }
 
-function refreshSliding(entry: RedisEntry, nowMs: number): boolean {
+function slidingRefreshExpiry(entry: RedisEntry, nowMs: number): number | null {
   if (entry.slidingMs === null) {
-    return false;
+    return null;
   }
   let next = nowMs + entry.slidingMs;
   if (entry.absoluteDeadlineMs !== null) {
     next = Math.min(next, entry.absoluteDeadlineMs);
   }
   if (entry.expiresAtMs === next) {
-    return false;
+    return null;
   }
-  entry.expiresAtMs = next;
-  return true;
+  return next;
 }
 
 function requirePrefix(value: string | undefined): string {
@@ -288,8 +287,12 @@ export function createRedisCacheStore(
           logOutcome(logger, "miss", key.namespace);
           return { status: "miss" };
         }
-        if (refreshSliding(entry, nowMs)) {
-          await compareAndSetEntry(formatted, raw, entry);
+        const refreshedExpiresAtMs = slidingRefreshExpiry(entry, nowMs);
+        if (refreshedExpiresAtMs !== null) {
+          const refreshed = { ...entry, expiresAtMs: refreshedExpiresAtMs };
+          if (await compareAndSetEntry(formatted, raw, refreshed)) {
+            entry = refreshed;
+          }
         }
         try {
           const value = codec.decode(entry.bytes);

@@ -282,6 +282,49 @@ describe("Redis adapter guarantees", () => {
     });
   });
 
+  it("does not advertise a sliding TTL that the CAS did not persist", async () => {
+    const clock = createControllableClock(START);
+    const keyPrefix = nextPrefix();
+    const codec = jsonCodec<string>();
+    const address = { namespace: "ttl", key: "cas-expiry" };
+    const writer = createRedisCacheStore({ clock, redis, keyPrefix });
+    await writer.set(address, "old", codec, { ttl: { slidingMs: 1_000 } });
+    clock.advance(600);
+
+    let releaseRead = (): void => {};
+    const holdRead = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    let sawRead = (): void => {};
+    const startedRead = new Promise<void>((resolve) => {
+      sawRead = resolve;
+    });
+    const reader = createRedisCacheStore({
+      clock,
+      redis: proxyRedis(redis, {
+        async afterGetBuffer() {
+          sawRead();
+          await holdRead;
+        },
+      }),
+      keyPrefix,
+    });
+
+    const pending = reader.get(address, codec);
+    await startedRead;
+    await writer.set(address, "new", codec, { ttl: { absoluteMs: 5_000 } });
+    releaseRead();
+    const lost = await pending;
+    expect(lost).toMatchObject({
+      status: "hit",
+      value: "old",
+      expiresAt: "2026-08-15T16:00:01.000Z",
+    });
+    expect(lost).not.toMatchObject({
+      expiresAt: "2026-08-15T16:00:01.600Z",
+    });
+  });
+
   it("does not delete a winning entry when a stale tag is invalidated", async () => {
     const clock = createControllableClock(START);
     const keyPrefix = nextPrefix();
