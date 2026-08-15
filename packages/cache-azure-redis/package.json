@@ -1,0 +1,45 @@
+{
+  "name": "@pegma/cache-azure-redis",
+  "version": "0.1.0",
+  "description": "Azure Cache for Redis adapter for @pegma/cache-core.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist/**/*.d.ts",
+    "dist/**/*.d.ts.map",
+    "dist/**/*.js",
+    "dist/**/*.js.map"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/pegma-dev/cache-core.git",
+    "directory": "packages/cache-azure-redis"
+  },
+  "dependencies": {
+    "@pegma/cache-core": "0.1.0",
+    "@pegma/cache-redis": "0.1.0",
+    "@pegma/spine": "0.1.2"
+  },
+  "devDependencies": {
+    "@pegma/cache-conformance": "0.1.0",
+    "ioredis": "^5.8.2"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "check": "tsc -p tsconfig.json --noEmit",
+    "prepack": "pnpm run build"
+  }
+}

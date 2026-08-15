@@ -3,6 +3,7 @@
   "references": [
     { "path": "./packages/cache-core" },
     { "path": "./packages/cache-conformance" },
-    { "path": "./packages/cache-redis" }
+    { "path": "./packages/cache-redis" },
+    { "path": "./packages/cache-azure-redis" }
   ]
 }

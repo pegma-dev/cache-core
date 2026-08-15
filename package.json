@@ -19,7 +19,8 @@
     "release:pack": "node scripts/release-packages.mjs pack",
     "release:publish": "node scripts/release-packages.mjs publish",
     "test": "pnpm run build && vitest run",
-    "test:redis": "pnpm run build && vitest run --config vitest.redis.config.ts"
+    "test:redis": "pnpm run build && vitest run --config vitest.redis.config.ts",
+    "test:azure-redis": "pnpm run build && vitest run --config vitest.azure-redis.config.ts"
   },
   "devDependencies": {
     "@types/node": "^26.1.1",

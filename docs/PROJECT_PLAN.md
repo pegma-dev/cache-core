@@ -2,9 +2,9 @@
 
 ## Status
 
-**Stage:** Phase 2 — generic Redis adapter, in-tree, unpublished.
-`@pegma/cache-core`, `@pegma/cache-conformance`, and `@pegma/cache-redis`
-are `0.1.0` and not published.
+**Stage:** Phase 3 — Azure Cache for Redis adapter, in-tree, unpublished.
+`@pegma/cache-core`, `@pegma/cache-conformance`, `@pegma/cache-redis`, and
+`@pegma/cache-azure-redis` are `0.1.0` and not published.
 
 **License:** MIT
 
@@ -96,9 +96,10 @@ those land with a later adapter, named, tested, and never smuggled into
 ### No adapter package without a consumer
 
 The Pegma rule: do not create an adapter package until implementation
-begins and a named consumer exists. Phase 2 creates `@pegma/cache-redis`
-because RetireGolden.org and Exsimplify are named future hosts.
-`cache-azure-redis`, `cache-elasticache`, and `cache-upstash-redis` wait.
+begins and a named consumer exists. Phase 2 created `@pegma/cache-redis`
+and Phase 3 creates `@pegma/cache-azure-redis` because RetireGolden.org
+and Exsimplify are named future hosts. `cache-elasticache` and
+`cache-upstash-redis` wait.
 
 ### Vendor clients stay behind the port
 
@@ -126,7 +127,7 @@ local composition never take a network client.
 - **Unbounded local memory fallbacks when a remote cache is down.**
   Fail-open computes; it does not accumulate.
 - **Vendor clients in application code.**
-- **Azure Redis / ElastiCache / Upstash packages in Phase 2.**
+- **ElastiCache / Upstash packages in Phase 3.**
   Those remain later phases.
 
 ## Package architecture
@@ -151,7 +152,7 @@ Dependencies: `@pegma/spine` pinned exactly. Conformance pins
 helper, in-memory store, and the suite cases listed above. The in-memory
 store is the first adapter and must pass.
 
-### Phase 2 — generic Redis adapter (this PR)
+### Phase 2 — generic Redis adapter
 
 `@pegma/cache-redis` against a real empty Redis (or a faithful local
 server). Created because RetireGolden.org and Exsimplify are named future
@@ -159,9 +160,11 @@ hosts. Must pass `@pegma/cache-conformance`. Expiry stays on the injected
 Clock; tag invalidation uses a sidecar index and never implies a
 multi-key command.
 
-### Phase 3 — Azure Cache for Redis
+### Phase 3 — Azure Cache for Redis (this PR)
 
-Thin adapter over the same port. Real backend, same suite.
+Thin adapter over the same port. Azure Cache for Redis speaks Redis, so
+`@pegma/cache-azure-redis` composes `@pegma/cache-redis` rather than
+wrapping a data-plane Azure SDK. Real backend, same suite.
 
 ### Phase 4 — Amazon ElastiCache
 

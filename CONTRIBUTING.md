@@ -23,6 +23,7 @@ pnpm install --frozen-lockfile
 pnpm run check
 pnpm test
 pnpm run test:redis
+pnpm run test:azure-redis
 pnpm run format:check
 ```
 

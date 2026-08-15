@@ -36,13 +36,15 @@ and a conformance suite every adapter must pass.
 | `@pegma/cache-core`          | Port, codecs, single-flight, memory store | 1     |
 | `@pegma/cache-conformance`   | Executable suite every adapter must pass  | 1     |
 | `@pegma/cache-redis`         | Generic Redis adapter                     | 2     |
-| `@pegma/cache-azure-redis`   | Azure Cache for Redis adapter             | later |
+| `@pegma/cache-azure-redis`   | Azure Cache for Redis adapter             | 3     |
 | `@pegma/cache-elasticache`   | Amazon ElastiCache adapter                | later |
 | `@pegma/cache-upstash-redis` | Upstash Redis adapter                     | later |
 
-`@pegma/cache-redis` is the generic Redis adapter. Intended future hosts:
-RetireGolden.org and Exsimplify. Remaining adapter packages wait until
-implementation begins and a named consumer exists.
+`@pegma/cache-redis` is the generic Redis adapter.
+`@pegma/cache-azure-redis` is a thin composition of it: Azure Cache for
+Redis speaks Redis. Intended future hosts: RetireGolden.org and
+Exsimplify. Remaining adapter packages wait until implementation begins
+and a named consumer exists.
 
 ## Constraint that shapes everything
 
@@ -68,11 +70,12 @@ pnpm run format:check
 pnpm run check
 pnpm test
 pnpm run test:redis
+pnpm run test:azure-redis
 ```
 
 `pnpm test` is the Phase 1 gate and does not need Redis. `pnpm run test:redis`
-starts a local `redis-server` on port 16379 when that port is free, or uses
-whatever is already listening there.
+and `pnpm run test:azure-redis` start a local `redis-server` on port 16379
+when that port is free, or use whatever is already listening there.
 
 ## License
 
