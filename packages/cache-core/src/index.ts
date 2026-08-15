@@ -250,6 +250,8 @@ export interface RunGetOrComputeOptions<T> extends CacheGetOrComputeOptions<T> {
 /**
  * Cache-aside helper adapters should call. Single-flight is process-local.
  * Fail-open computes when `get` errors; fail-closed returns that error.
+ * Get and compute are coalesced separately so mixed fallbacks keep their
+ * own outcomes while still sharing backend and origin work.
  */
 export async function runGetOrCompute<T>(
   options: RunGetOrComputeOptions<T>,
@@ -257,57 +259,65 @@ export async function runGetOrCompute<T>(
   const formatted = formatCacheKey(options.key);
   const fallback = options.fallback ?? "fail-closed";
   const random = options.random ?? Math.random;
-  return options.singleFlight.do(formatted, async () => {
-    let read: CacheResult<T>;
-    try {
-      read = await options.backend.get(options.key, options.codec);
-    } catch (error) {
-      read = { status: "error", error };
-    }
+  const getFlight = `${formatted}#get`;
+  const computeFlight = `${formatted}#compute`;
 
-    if (read.status === "hit") {
-      const expiresAt = read.expiresAt;
-      const lastComputeMs = read.lastComputeMs;
-      if (
-        options.earlyExpiration !== undefined &&
-        expiresAt !== undefined &&
-        lastComputeMs !== undefined
-      ) {
-        const beta = options.earlyExpiration.beta ?? 1;
-        if (
-          shouldExpireEarly({
-            nowMs: clockMs(options.clock),
-            expiresAtMs: Date.parse(expiresAt),
-            lastComputeMs,
-            beta,
-            random,
-          })
-        ) {
-          const recomputed = await computeAndStore(
-            options,
-            clockMs(options.clock),
-          );
-          if (recomputed.status === "hit") {
-            return recomputed;
-          }
-          return read;
-        }
+  let read: CacheResult<T>;
+  try {
+    read = await options.singleFlight.do(getFlight, async () => {
+      try {
+        return await options.backend.get(options.key, options.codec);
+      } catch (error) {
+        return { status: "error", error };
       }
-      logOutcome(options.logger, "hit", options.key.namespace);
-      return read;
-    }
+    });
+  } catch (error) {
+    read = { status: "error", error };
+  }
 
-    if (read.status === "error") {
-      logOutcome(options.logger, "error", options.key.namespace);
-      if (fallback === "fail-closed") {
+  if (read.status === "hit") {
+    const expiresAt = read.expiresAt;
+    const lastComputeMs = read.lastComputeMs;
+    if (
+      options.earlyExpiration !== undefined &&
+      expiresAt !== undefined &&
+      lastComputeMs !== undefined
+    ) {
+      const beta = options.earlyExpiration.beta ?? 1;
+      if (
+        shouldExpireEarly({
+          nowMs: clockMs(options.clock),
+          expiresAtMs: Date.parse(expiresAt),
+          lastComputeMs,
+          beta,
+          random,
+        })
+      ) {
+        const recomputed = await options.singleFlight.do(computeFlight, () =>
+          computeAndStore(options, clockMs(options.clock)),
+        );
+        if (recomputed.status === "hit") {
+          return recomputed;
+        }
         return read;
       }
-    } else {
-      logOutcome(options.logger, "miss", options.key.namespace);
     }
+    logOutcome(options.logger, "hit", options.key.namespace);
+    return read;
+  }
 
-    return computeAndStore(options, clockMs(options.clock));
-  });
+  if (read.status === "error") {
+    logOutcome(options.logger, "error", options.key.namespace);
+    if (fallback === "fail-closed") {
+      return read;
+    }
+  } else {
+    logOutcome(options.logger, "miss", options.key.namespace);
+  }
+
+  return options.singleFlight.do(computeFlight, () =>
+    computeAndStore(options, clockMs(options.clock)),
+  );
 }
 
 async function computeAndStore<T>(
@@ -449,7 +459,7 @@ export function createMemoryCacheStore(options: CacheDependencies): CacheStore {
       if (previous !== undefined) {
         forgetTags(formatted, previous.tags);
       }
-      const tags = setOptions?.tags ?? [];
+      const tags = [...(setOptions?.tags ?? [])];
       const deadlines = ttlDeadlines(nowMs, setOptions?.ttl);
       entries.set(formatted, {
         bytes: codec.encode(value).slice(),

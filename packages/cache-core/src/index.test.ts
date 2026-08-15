@@ -6,6 +6,7 @@ import {
   createControllableClock,
   createMemoryCacheStore,
   createSingleFlight,
+  createUnavailableCacheStore,
   formatCacheKey,
   jsonCodec,
   shouldExpireEarly,
@@ -156,5 +157,103 @@ describe("createMemoryCacheStore", () => {
     });
     expect(computes).toBe(2);
     expect(second).toMatchObject({ status: "hit", value: "v2" });
+  });
+
+  it("does not let a later tag-array mutation poison the index", async () => {
+    const clock = createControllableClock(START);
+    const store = createMemoryCacheStore({ clock });
+    const codec = jsonCodec<string>();
+    const address = { namespace: "tags", key: "row" };
+    const tags = ["group"];
+    await store.set(address, "v1", codec, { tags });
+    tags[0] = "mutated";
+    await store.delete(address);
+    await store.set(address, "v2", codec);
+    expect(await store.invalidateTags(["group"])).toEqual({
+      status: "hit",
+      value: 0,
+    });
+    expect(await store.get(address, codec)).toMatchObject({
+      status: "hit",
+      value: "v2",
+    });
+  });
+});
+
+describe("runGetOrCompute fallback isolation", () => {
+  it("does not give a fail-closed caller a fail-open compute", async () => {
+    const clock = createControllableClock(START);
+    const store = createUnavailableCacheStore({ clock });
+    const codec = jsonCodec<string>();
+    const address = { namespace: "down", key: "shared" };
+    let computes = 0;
+    let entered = (): void => {};
+    const started = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    let release = (): void => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+
+    const open = store.getOrCompute(address, {
+      codec,
+      fallback: "fail-open",
+      compute: async () => {
+        computes += 1;
+        entered();
+        await gate;
+        return "from-origin";
+      },
+    });
+    await started;
+    const closed = store.getOrCompute(address, {
+      codec,
+      fallback: "fail-closed",
+      compute: () => {
+        computes += 1;
+        return "should-not-run";
+      },
+    });
+    const closedResult = await closed;
+    expect(closedResult.status).toBe("error");
+    expect(computes).toBe(1);
+    release();
+    await expect(open).resolves.toMatchObject({
+      status: "hit",
+      value: "from-origin",
+    });
+    expect(computes).toBe(1);
+  });
+
+  it("does not let a fail-closed flight block fail-open compute", async () => {
+    const clock = createControllableClock(START);
+    const store = createUnavailableCacheStore({ clock });
+    const codec = jsonCodec<string>();
+    const address = { namespace: "down", key: "shared" };
+    let computes = 0;
+
+    const [closed, open] = await Promise.all([
+      store.getOrCompute(address, {
+        codec,
+        fallback: "fail-closed",
+        compute: () => {
+          computes += 1;
+          return "should-not-run";
+        },
+      }),
+      store.getOrCompute(address, {
+        codec,
+        fallback: "fail-open",
+        compute: () => {
+          computes += 1;
+          return "from-origin";
+        },
+      }),
+    ]);
+
+    expect(closed.status).toBe("error");
+    expect(open).toMatchObject({ status: "hit", value: "from-origin" });
+    expect(computes).toBe(1);
   });
 });
