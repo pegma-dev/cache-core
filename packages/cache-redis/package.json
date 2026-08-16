@@ -1,6 +1,6 @@
 {
   "name": "@pegma/cache-redis",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Generic Redis adapter for @pegma/cache-core.",
   "license": "MIT",
   "type": "module",
@@ -29,16 +29,16 @@
     "directory": "packages/cache-redis"
   },
   "dependencies": {
-    "@pegma/cache-core": "0.1.0",
+    "@pegma/cache-core": "0.1.1",
     "@pegma/spine": "0.1.2",
     "ioredis": "^5.8.2"
   },
   "devDependencies": {
-    "@pegma/cache-conformance": "0.1.0"
+    "@pegma/cache-conformance": "0.1.1"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
-    "prepack": "pnpm run build"
+    "prepack": "tsc -p tsconfig.json"
   }
 }

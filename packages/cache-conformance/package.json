@@ -1,6 +1,6 @@
 {
   "name": "@pegma/cache-conformance",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Executable conformance suite every @pegma/cache-core adapter must pass.",
   "license": "MIT",
   "type": "module",
@@ -29,12 +29,12 @@
     "directory": "packages/cache-conformance"
   },
   "dependencies": {
-    "@pegma/cache-core": "0.1.0",
+    "@pegma/cache-core": "0.1.1",
     "@pegma/spine": "0.1.2"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
-    "prepack": "pnpm run build"
+    "prepack": "tsc -p tsconfig.json"
   }
 }

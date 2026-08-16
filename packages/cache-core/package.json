@@ -1,6 +1,6 @@
 {
   "name": "@pegma/cache-core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Provider-neutral ephemeral caching: namespaced keys, cache-aside getOrCompute, and an in-memory store.",
   "license": "MIT",
   "type": "module",
@@ -34,6 +34,6 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsc -p tsconfig.json --noEmit",
-    "prepack": "pnpm run build"
+    "prepack": "tsc -p tsconfig.json"
   }
 }

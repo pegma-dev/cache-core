@@ -24,17 +24,17 @@ importers:
   packages/cache-azure-redis:
     dependencies:
       '@pegma/cache-core':
-        specifier: 0.1.0
+        specifier: 0.1.1
         version: link:../cache-core
       '@pegma/cache-redis':
-        specifier: 0.1.0
+        specifier: 0.1.1
         version: link:../cache-redis
       '@pegma/spine':
         specifier: 0.1.2
         version: 0.1.2
     devDependencies:
       '@pegma/cache-conformance':
-        specifier: 0.1.0
+        specifier: 0.1.1
         version: link:../cache-conformance
       ioredis:
         specifier: ^5.8.2
@@ -43,7 +43,7 @@ importers:
   packages/cache-conformance:
     dependencies:
       '@pegma/cache-core':
-        specifier: 0.1.0
+        specifier: 0.1.1
         version: link:../cache-core
       '@pegma/spine':
         specifier: 0.1.2
@@ -58,17 +58,17 @@ importers:
   packages/cache-elasticache:
     dependencies:
       '@pegma/cache-core':
-        specifier: 0.1.0
+        specifier: 0.1.1
         version: link:../cache-core
       '@pegma/cache-redis':
-        specifier: 0.1.0
+        specifier: 0.1.1
         version: link:../cache-redis
       '@pegma/spine':
         specifier: 0.1.2
         version: 0.1.2
     devDependencies:
       '@pegma/cache-conformance':
-        specifier: 0.1.0
+        specifier: 0.1.1
         version: link:../cache-conformance
       ioredis:
         specifier: ^5.8.2
@@ -77,7 +77,7 @@ importers:
   packages/cache-redis:
     dependencies:
       '@pegma/cache-core':
-        specifier: 0.1.0
+        specifier: 0.1.1
         version: link:../cache-core
       '@pegma/spine':
         specifier: 0.1.2
@@ -87,16 +87,16 @@ importers:
         version: 5.11.1
     devDependencies:
       '@pegma/cache-conformance':
-        specifier: 0.1.0
+        specifier: 0.1.1
         version: link:../cache-conformance
 
   packages/cache-upstash-redis:
     dependencies:
       '@pegma/cache-core':
-        specifier: 0.1.0
+        specifier: 0.1.1
         version: link:../cache-core
       '@pegma/cache-redis':
-        specifier: 0.1.0
+        specifier: 0.1.1
         version: link:../cache-redis
       '@pegma/spine':
         specifier: 0.1.2
@@ -106,7 +106,7 @@ importers:
         version: 1.38.2
     devDependencies:
       '@pegma/cache-conformance':
-        specifier: 0.1.0
+        specifier: 0.1.1
         version: link:../cache-conformance
       ioredis:
         specifier: ^5.8.2

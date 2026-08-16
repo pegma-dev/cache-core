@@ -8,6 +8,7 @@ import {
   isNormalReleaseVersion,
   lockDependencyMatches,
   parseArguments,
+  parseNpmJson,
   parsePnpmLockfileImporters,
   resolvedVersionSatisfies,
   validateRepository,
@@ -44,7 +45,7 @@ describe("release package metadata", () => {
     ]);
   });
 
-  it("ships the synchronized 0.1.0 package set with exact internal pins", () => {
+  it("ships the synchronized 0.1.1 package set with exact internal pins", () => {
     const manifests = RELEASE_PACKAGES.map(({ directory }) =>
       JSON.parse(
         readFileSync(
@@ -56,30 +57,34 @@ describe("release package metadata", () => {
       name: string;
       version: string;
       dependencies?: Record<string, string>;
+      scripts?: { prepack?: string };
     }>;
 
     expect(manifests.map(({ name, version }) => ({ name, version }))).toEqual([
-      { name: "@pegma/cache-core", version: "0.1.0" },
-      { name: "@pegma/cache-conformance", version: "0.1.0" },
-      { name: "@pegma/cache-redis", version: "0.1.0" },
-      { name: "@pegma/cache-azure-redis", version: "0.1.0" },
-      { name: "@pegma/cache-elasticache", version: "0.1.0" },
-      { name: "@pegma/cache-upstash-redis", version: "0.1.0" },
+      { name: "@pegma/cache-core", version: "0.1.1" },
+      { name: "@pegma/cache-conformance", version: "0.1.1" },
+      { name: "@pegma/cache-redis", version: "0.1.1" },
+      { name: "@pegma/cache-azure-redis", version: "0.1.1" },
+      { name: "@pegma/cache-elasticache", version: "0.1.1" },
+      { name: "@pegma/cache-upstash-redis", version: "0.1.1" },
     ]);
-    expect(manifests[1]?.dependencies?.["@pegma/cache-core"]).toBe("0.1.0");
-    expect(manifests[2]?.dependencies?.["@pegma/cache-core"]).toBe("0.1.0");
-    expect(manifests[3]?.dependencies?.["@pegma/cache-core"]).toBe("0.1.0");
-    expect(manifests[3]?.dependencies?.["@pegma/cache-redis"]).toBe("0.1.0");
-    expect(manifests[4]?.dependencies?.["@pegma/cache-core"]).toBe("0.1.0");
-    expect(manifests[4]?.dependencies?.["@pegma/cache-redis"]).toBe("0.1.0");
-    expect(manifests[5]?.dependencies?.["@pegma/cache-core"]).toBe("0.1.0");
-    expect(manifests[5]?.dependencies?.["@pegma/cache-redis"]).toBe("0.1.0");
+    expect(manifests[1]?.dependencies?.["@pegma/cache-core"]).toBe("0.1.1");
+    expect(manifests[2]?.dependencies?.["@pegma/cache-core"]).toBe("0.1.1");
+    expect(manifests[3]?.dependencies?.["@pegma/cache-core"]).toBe("0.1.1");
+    expect(manifests[3]?.dependencies?.["@pegma/cache-redis"]).toBe("0.1.1");
+    expect(manifests[4]?.dependencies?.["@pegma/cache-core"]).toBe("0.1.1");
+    expect(manifests[4]?.dependencies?.["@pegma/cache-redis"]).toBe("0.1.1");
+    expect(manifests[5]?.dependencies?.["@pegma/cache-core"]).toBe("0.1.1");
+    expect(manifests[5]?.dependencies?.["@pegma/cache-redis"]).toBe("0.1.1");
     expect(manifests[0]?.dependencies?.["@pegma/spine"]).toBe("0.1.2");
     expect(manifests[2]?.dependencies?.["@pegma/spine"]).toBe("0.1.2");
     expect(manifests[3]?.dependencies?.["@pegma/spine"]).toBe("0.1.2");
     expect(manifests[4]?.dependencies?.["@pegma/spine"]).toBe("0.1.2");
     expect(manifests[5]?.dependencies?.["@pegma/spine"]).toBe("0.1.2");
-    expect(packageVersion).toBe("0.1.0");
+    expect(packageVersion).toBe("0.1.1");
+    for (const manifest of manifests) {
+      expect(manifest.scripts?.prepack).toBe("tsc -p tsconfig.json");
+    }
   });
 
   it("rejects the bootstrap range from the normal release lane", () => {
@@ -236,7 +241,7 @@ packages:
     expect(
       live["packages/cache-conformance"]?.dependencies?.["@pegma/cache-core"],
     ).toEqual({
-      specifier: "0.1.0",
+      specifier: "0.1.1",
       version: "link:../cache-core",
     });
     expect(
@@ -248,14 +253,14 @@ packages:
     expect(
       lockDependencyMatches(
         live["packages/cache-conformance"]?.dependencies?.["@pegma/cache-core"],
-        "0.1.0",
+        "0.1.1",
         { workspace: true },
       ),
     ).toBe(true);
     expect(
       live["packages/cache-redis"]?.dependencies?.["@pegma/cache-core"],
     ).toEqual({
-      specifier: "0.1.0",
+      specifier: "0.1.1",
       version: "link:../cache-core",
     });
     expect(
@@ -269,7 +274,7 @@ packages:
         live["packages/cache-redis"]?.devDependencies?.[
           "@pegma/cache-conformance"
         ],
-        "0.1.0",
+        "0.1.1",
         { workspace: true },
       ),
     ).toBe(true);
@@ -282,7 +287,7 @@ packages:
     expect(
       live["packages/cache-azure-redis"]?.dependencies?.["@pegma/cache-redis"],
     ).toEqual({
-      specifier: "0.1.0",
+      specifier: "0.1.1",
       version: "link:../cache-redis",
     });
     expect(
@@ -296,7 +301,7 @@ packages:
         live["packages/cache-azure-redis"]?.devDependencies?.[
           "@pegma/cache-conformance"
         ],
-        "0.1.0",
+        "0.1.1",
         { workspace: true },
       ),
     ).toBe(true);
@@ -309,7 +314,7 @@ packages:
     expect(
       live["packages/cache-elasticache"]?.dependencies?.["@pegma/cache-redis"],
     ).toEqual({
-      specifier: "0.1.0",
+      specifier: "0.1.1",
       version: "link:../cache-redis",
     });
     expect(
@@ -323,7 +328,7 @@ packages:
         live["packages/cache-elasticache"]?.devDependencies?.[
           "@pegma/cache-conformance"
         ],
-        "0.1.0",
+        "0.1.1",
         { workspace: true },
       ),
     ).toBe(true);
@@ -338,7 +343,7 @@ packages:
         "@pegma/cache-redis"
       ],
     ).toEqual({
-      specifier: "0.1.0",
+      specifier: "0.1.1",
       version: "link:../cache-redis",
     });
     expect(
@@ -352,7 +357,7 @@ packages:
         live["packages/cache-upstash-redis"]?.devDependencies?.[
           "@pegma/cache-conformance"
         ],
-        "0.1.0",
+        "0.1.1",
         { workspace: true },
       ),
     ).toBe(true);
@@ -425,6 +430,35 @@ packages:
     );
     expect(source).toMatch(
       /function runNpm\([\s\S]*?process\.platform === "win32" \? "npm\.cmd" : "npm"/u,
+    );
+    expect(source).toMatch(/runNpm\(\["run", "build"\]/u);
+    expect(source).not.toMatch(/runPnpm\(\["run", "build"\]/u);
+    expect(source).toMatch(
+      /const \[packed\] = parseNpmJson\(result\.stdout\)/u,
+    );
+    expect(source).not.toMatch(/JSON\.parse\(result\.stdout\)/u);
+  });
+
+  it("does not JSON.parse pnpm's human script banner", () => {
+    const packed = [
+      {
+        name: "@pegma/cache-core",
+        version: "0.1.1",
+        filename: "pegma-cache-core-0.1.1.tgz",
+        files: [],
+      },
+    ];
+    const stdout = [
+      "> @pegma/cache-core@0.1.0 build /home/runner/work/cache-core/cache-core/packages/cache-core",
+      "> tsc -p tsconfig.json",
+      "",
+      JSON.stringify(packed),
+    ].join("\n");
+    expect(() => JSON.parse(stdout)).toThrow(SyntaxError);
+    expect(parseNpmJson(stdout)).toEqual(packed);
+    expect(parseNpmJson(`${JSON.stringify(packed)}\n`)).toEqual(packed);
+    expect(parseNpmJson('"sha512-cHJlcGFyZWQtdGFyYmFsbA=="\n')).toBe(
+      "sha512-cHJlcGFyZWQtdGFyYmFsbA==",
     );
   });
 });

@@ -5,7 +5,7 @@
 **Stage:** Phase 5 — Upstash Redis adapter, in-tree, unpublished.
 `@pegma/cache-core`, `@pegma/cache-conformance`, `@pegma/cache-redis`,
 `@pegma/cache-azure-redis`, `@pegma/cache-elasticache`, and
-`@pegma/cache-upstash-redis` are `0.1.0` and not published.
+`@pegma/cache-upstash-redis` are `0.1.1` and not published.
 
 **License:** MIT
 

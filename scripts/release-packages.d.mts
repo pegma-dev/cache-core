@@ -72,6 +72,8 @@ export function validateReleaseTag(options?: {
   readonly expectedReleaseCommit?: string;
 }): { headCommit: string; releaseTag: string };
 
+export function parseNpmJson(stdout: string): unknown;
+
 export function decidePublication(
   localIntegrity: string,
   registryIntegrity: string | null,

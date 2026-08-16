@@ -117,11 +117,17 @@ function runNpm(arguments_, options = {}) {
   });
 }
 
-function runPnpm(arguments_, options = {}) {
-  return run(process.platform === "win32" ? "pnpm.cmd" : "pnpm", arguments_, {
-    ...options,
-    shell: process.platform === "win32",
-  });
+/**
+ * npm --json writes a JSON value to stdout. A lifecycle script may print a
+ * human banner first (`> @scope/name@version build /path`). Parse only the
+ * JSON value; never JSON.parse the whole stream.
+ */
+export function parseNpmJson(stdout) {
+  const start = stdout.search(/^\s*[\[{"']/mu);
+  if (start === -1) {
+    fail("npm produced no JSON output");
+  }
+  return JSON.parse(stdout.slice(start));
 }
 
 function unquoteYamlScalar(value) {
@@ -403,11 +409,15 @@ async function validatePackage(root, definition, lockfile) {
   ) {
     fail(`${definition.name} must publish only its dist allowlist`);
   }
+  const prepack = manifest.scripts?.prepack;
   if (
-    typeof manifest.scripts?.prepack !== "string" ||
-    !manifest.scripts.prepack.includes("build")
+    typeof prepack !== "string" ||
+    !(prepack.includes("build") || prepack.includes("tsc"))
   ) {
     fail(`${definition.name} must build during prepack`);
+  }
+  if (/\bpnpm\b/u.test(prepack)) {
+    fail(`${definition.name} prepack must not invoke pnpm`);
   }
   const targets = exportTargets(manifest.exports);
   if (
@@ -687,7 +697,7 @@ function queryRegistryIntegrity(name, version) {
     allowFailure: true,
   });
   if (result.status === 0) {
-    const integrity = JSON.parse(result.stdout);
+    const integrity = parseNpmJson(result.stdout);
     if (typeof integrity !== "string" || integrity.length === 0) {
       fail(`${spec} exists without dist.integrity`);
     }
@@ -732,7 +742,7 @@ export async function prepareRelease(options = {}) {
     fail(`release output directory must be empty: ${output}`);
   }
 
-  runPnpm(["run", "build"], { cwd: root });
+  runNpm(["run", "build"], { cwd: root });
   const records = [];
   const tagVersion = releaseTag?.slice(1);
   for (const { definition, manifest } of packages) {
@@ -746,7 +756,7 @@ export async function prepareRelease(options = {}) {
       ],
       { cwd: root, capture: true },
     );
-    const [packed] = JSON.parse(result.stdout);
+    const [packed] = parseNpmJson(result.stdout);
     if (
       packed?.name !== definition.name ||
       packed?.version !== manifest.version ||
