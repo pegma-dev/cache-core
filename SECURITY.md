@@ -2,9 +2,9 @@
 
 ## Supported versions
 
-This project is in early `0.x` development and is not published yet.
-Security fixes apply to the latest reviewed source until the first
-advertised release of `@pegma/cache-core`.
+This project is in early `0.x` development. Public packages are published
+at `0.1.1`. The `0.x` API is unstable.
+Security fixes apply to the latest published `0.1.1`.
 
 ## Reporting a vulnerability
 

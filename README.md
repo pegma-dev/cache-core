@@ -8,8 +8,8 @@ typed key namespaces, cache-aside `getOrCompute` with stampede protection,
 and a conformance suite every adapter must pass.
 
 > [!IMPORTANT]
-> Pegma is in early `0.x` development. Packages are not published yet. No
-> public API is stable.
+> Pegma is in early `0.x` development. Packages are published at `0.1.1`.
+> The `0.x` API is unstable.
 
 ## Owns
 
