@@ -290,9 +290,10 @@ export async function runGetOrCompute<T>(
   options: RunGetOrComputeOptions<T>,
 ): Promise<CacheResult<T>> {
   const formatted = formatCacheKey(options.key);
-  if (options.tags !== undefined) {
-    validateCacheTags(options.tags);
-  }
+  const validatedOptions: RunGetOrComputeOptions<T> =
+    options.tags === undefined
+      ? options
+      : { ...options, tags: validateCacheTags(options.tags) };
   const fallback = options.fallback ?? "fail-closed";
   const random = options.random ?? Math.random;
   const getFlight = `${formatted}#get`;
@@ -330,7 +331,7 @@ export async function runGetOrCompute<T>(
         })
       ) {
         const recomputed = await options.singleFlight.do(computeFlight, () =>
-          computeAndStore(options, clockMs(options.clock)),
+          computeAndStore(validatedOptions, clockMs(options.clock)),
         );
         if (recomputed.status === "hit") {
           return recomputed;
@@ -352,7 +353,7 @@ export async function runGetOrCompute<T>(
   }
 
   return options.singleFlight.do(computeFlight, () =>
-    computeAndStore(options, clockMs(options.clock)),
+    computeAndStore(validatedOptions, clockMs(options.clock)),
   );
 }
 

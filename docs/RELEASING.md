@@ -46,13 +46,15 @@ After that pull request is merged, create a signed annotated tag at the exact
 create the GitHub release with `--verify-tag`. Do not let GitHub create the tag
 and never move or recreate a release tag.
 
-Before either checkout or publication, workflow-owned code verifies that the
-tag:
+Before checkout, workflow-owned code verifies that the tag:
 
 - is a stable annotated `vX.Y.Z` tag signed by an allowed signer;
-- matches the package version;
 - points to the checkout and the GitHub release-event commit; and
 - is contained in `origin/main`.
+
+After checkout, preparation also verifies that the tag matches a public
+package version. Before publication, workflow-owned code repeats the tag
+checks and verifies the package version from the sealed manifest.
 
 Its preparation job has no OIDC permission. It installs the reviewed npm
 `11.18.0` release and the pinned pnpm without dependency caching, runs the

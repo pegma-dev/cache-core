@@ -10,6 +10,7 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 
 const REPOSITORY_URL = "git+https://github.com/pegma-dev/cache-core.git";
 const NODE_RANGE = ">=22";
@@ -68,7 +69,7 @@ async function readJson(path) {
 }
 
 function sameJson(left, right) {
-  return JSON.stringify(left) === JSON.stringify(right);
+  return isDeepStrictEqual(left, right);
 }
 
 function safeEqual(left, right) {
@@ -576,6 +577,23 @@ export async function validateRepository(options = {}) {
       fail("release preparation requires a clean checkout");
     }
   }
+  if (options.expectedReleaseCommit !== undefined) {
+    if (!/^[0-9a-f]{40,64}$/iu.test(options.expectedReleaseCommit)) {
+      fail("an exact release event commit is required");
+    }
+    const head = run(gitCommand(), ["rev-parse", "HEAD"], {
+      cwd: root,
+      capture: true,
+    }).stdout.trim();
+    if (
+      !safeEqual(
+        head.toLowerCase(),
+        options.expectedReleaseCommit.toLowerCase(),
+      )
+    ) {
+      fail("release checkout must match the release event commit");
+    }
+  }
   if (options.requireMainAncestor) {
     const head = run(gitCommand(), ["rev-parse", "HEAD"], {
       cwd: root,
@@ -709,6 +727,7 @@ function validatePackedArchive(manifest, tarballPath, npmFiles) {
     capture: true,
   })
     .stdout.split(/\r?\n/u)
+    .map((entry) => entry.replace(/^\.\//u, ""))
     .filter((entry) => entry !== "" && !entry.endsWith("/"));
   if (archiveEntries.some((entry) => !entry.startsWith("package/"))) {
     fail(`${manifest.name} tarball contains an invalid archive path`);

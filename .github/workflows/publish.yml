@@ -175,7 +175,14 @@ jobs:
           node --input-type=module <<'NODE'
           import { spawnSync } from "node:child_process";
           import { createHash } from "node:crypto";
-          import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+          import {
+            lstat,
+            mkdtemp,
+            readFile,
+            readdir,
+            rm,
+            writeFile,
+          } from "node:fs/promises";
           import { tmpdir } from "node:os";
           import { join } from "node:path";
 
@@ -186,6 +193,41 @@ jobs:
             throw new Error("prepared manifest digest does not match");
           }
           const manifest = JSON.parse(manifestBytes.toString("utf8"));
+          const expectedFiles = new Set([
+            "package-manifest.json",
+            ...manifest.packages.map(({ tarball }) => tarball),
+          ]);
+          const entries = await readdir(releaseDirectory, { withFileTypes: true });
+          if (
+            entries.length !== expectedFiles.size ||
+            entries.some(({ name }) => !expectedFiles.has(name))
+          ) {
+            throw new Error("release directory inventory does not match the prepared manifest");
+          }
+          for (const entry of entries) {
+            const info = await lstat(join(releaseDirectory, entry.name));
+            if (
+              entry.name.startsWith(".") ||
+              !entry.isFile() ||
+              info.isSymbolicLink() ||
+              !info.isFile()
+            ) {
+              throw new Error(`release entry must be a regular visible file: ${entry.name}`);
+            }
+          }
+          for (const record of manifest.packages) {
+            const tarball = await readFile(join(releaseDirectory, record.tarball));
+            const sha256 = createHash("sha256").update(tarball).digest("hex");
+            const shasum = createHash("sha1").update(tarball).digest("hex");
+            const integrity = `sha512-${createHash("sha512").update(tarball).digest("base64")}`;
+            if (
+              sha256 !== record.sha256 ||
+              shasum !== record.shasum ||
+              integrity !== record.integrity
+            ) {
+              throw new Error(`${record.name} prepared tarball has changed`);
+            }
+          }
           const consumer = await mkdtemp(join(tmpdir(), "pegma-release-smoke-"));
           try {
             await writeFile(
@@ -213,13 +255,30 @@ jobs:
               throw new Error(`${installed.stdout}\n${installed.stderr}`);
             }
             for (const { name } of manifest.packages) {
-              const checked = spawnSync(
-                process.execPath,
-                ["--input-type=module", "--eval", `await import(${JSON.stringify(name)})`],
-                { cwd: consumer, encoding: "utf8", stdio: "pipe" },
+              const installedManifest = JSON.parse(
+                await readFile(join(consumer, "node_modules", name, "package.json"), "utf8"),
               );
-              if (checked.status !== 0) {
-                throw new Error(`${checked.stdout}\n${checked.stderr}`);
+              if (
+                installedManifest.exports === null ||
+                typeof installedManifest.exports !== "object" ||
+                Array.isArray(installedManifest.exports)
+              ) {
+                throw new Error(`${name} installed manifest has invalid exports`);
+              }
+              for (const exportKey of Object.keys(installedManifest.exports)) {
+                const specifier = exportKey === "." ? name : `${name}${exportKey.slice(1)}`;
+                const checked = spawnSync(
+                  process.execPath,
+                  [
+                    "--input-type=module",
+                    "--eval",
+                    `await import(${JSON.stringify(specifier)})`,
+                  ],
+                  { cwd: consumer, encoding: "utf8", stdio: "pipe" },
+                );
+                if (checked.status !== 0) {
+                  throw new Error(`${checked.stdout}\n${checked.stderr}`);
+                }
               }
             }
           } finally {
@@ -493,9 +552,11 @@ jobs:
                   confirmed = true;
                   break;
                 }
-                await new Promise((resolveDelay) =>
-                  setTimeout(resolveDelay, 2 ** attempt * 1000),
-                );
+                if (attempt < 5) {
+                  await new Promise((resolveDelay) =>
+                    setTimeout(resolveDelay, 2 ** attempt * 1000),
+                  );
+                }
               }
               if (!confirmed) {
                 throw new Error(`${record.name}@${record.version} did not become visible`);

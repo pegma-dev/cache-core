@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import {
   existsSync,
   mkdtempSync,
@@ -41,6 +42,18 @@ describe("release package metadata", () => {
 
   it("validates package manifests and the lockfile together", async () => {
     await expect(validateRepository()).resolves.toBeDefined();
+  });
+
+  it("binds preparation to the expected checkout commit", async () => {
+    const head = execFileSync("git", ["rev-parse", "HEAD"], {
+      encoding: "utf8",
+    }).trim();
+    await expect(
+      validateRepository({ expectedReleaseCommit: head }),
+    ).resolves.toBeDefined();
+    await expect(
+      validateRepository({ expectedReleaseCommit: "0".repeat(40) }),
+    ).rejects.toThrow(/release event commit/u);
   });
 
   it("keeps the exact public package inventory in dependency order", () => {
@@ -486,6 +499,14 @@ packages:
       validatePackedManifest(source, structuredClone(source)),
     ).not.toThrow();
     expect(() =>
+      validatePackedManifest(
+        source,
+        Object.fromEntries(
+          Object.entries(structuredClone(source)).reverse(),
+        ) as typeof source,
+      ),
+    ).not.toThrow();
+    expect(() =>
       validatePackedManifest(source, {
         ...structuredClone(source),
         scripts: { install: "node install.mjs" },
@@ -583,6 +604,9 @@ describe("release source authentication", () => {
     expect(smoke).not.toContain("id-token: write");
     expect(smoke).not.toContain("actions/checkout");
     expect(smoke).toContain("Install and import the prepared packages");
+    expect(smoke).toContain('createHash("sha256").update(tarball)');
+    expect(smoke).toContain("release directory inventory does not match");
+    expect(smoke).toContain("Object.keys(installedManifest.exports)");
     expect(publish).toContain("id-token: write");
     expect(publish).toContain("needs: [prepare, smoke]");
     expect(publish).toContain("Re-authenticate the release tag");

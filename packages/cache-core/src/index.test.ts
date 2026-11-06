@@ -254,6 +254,31 @@ describe("createMemoryCacheStore", () => {
 });
 
 describe("runGetOrCompute fallback isolation", () => {
+  it("snapshots tags before compute can mutate the caller array", async () => {
+    const clock = createControllableClock(START);
+    const store = createMemoryCacheStore({ clock });
+    const tags = ["group"];
+    await store.getOrCompute(
+      { namespace: "tags", key: "compute" },
+      {
+        codec: jsonCodec<string>(),
+        tags,
+        compute: () => {
+          tags[0] = "changed";
+          return "value";
+        },
+      },
+    );
+    expect(await store.invalidateTags(["group"])).toEqual({
+      status: "hit",
+      value: 1,
+    });
+    expect(await store.invalidateTags(["changed"])).toEqual({
+      status: "hit",
+      value: 0,
+    });
+  });
+
   it("does not give a fail-closed caller a fail-open compute", async () => {
     const clock = createControllableClock(START);
     const store = createUnavailableCacheStore({ clock });
