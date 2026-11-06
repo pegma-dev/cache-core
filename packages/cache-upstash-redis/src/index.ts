@@ -39,16 +39,6 @@ export interface UpstashRedisCacheStoreOptions extends CacheDependencies {
   readonly keyPrefix?: string;
 }
 
-function asWireArg(value: string | Buffer | number): string {
-  if (typeof value === "number") {
-    return String(value);
-  }
-  if (typeof value === "string") {
-    return value;
-  }
-  return value.toString("base64");
-}
-
 /**
  * REST/JSON cannot carry the binary envelope ioredis `getBuffer` / `set`
  * use. Encode on the wire as base64 so Lua CAS still compares the same
@@ -57,6 +47,18 @@ function asWireArg(value: string | Buffer | number): string {
 function adaptUpstashRedisClient(
   redis: UpstashRedisCacheClient,
 ): RedisCacheClient {
+  const observedWireValues = new WeakMap<Buffer, string>();
+
+  function asWireArg(value: string | Buffer | number): string {
+    if (typeof value === "number") {
+      return String(value);
+    }
+    if (typeof value === "string") {
+      return value;
+    }
+    return observedWireValues.get(value) ?? value.toString("base64");
+  }
+
   return {
     async getBuffer(key) {
       const raw = await redis.get(key);
@@ -66,7 +68,9 @@ function adaptUpstashRedisClient(
       if (typeof raw !== "string") {
         throw new Error("invalid upstash envelope");
       }
-      return Buffer.from(raw, "base64");
+      const decoded = Buffer.from(raw, "base64");
+      observedWireValues.set(decoded, raw);
+      return decoded;
     },
     set(key, value) {
       return redis.set(key, value.toString("base64"));

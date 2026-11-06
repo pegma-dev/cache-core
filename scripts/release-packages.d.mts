@@ -74,6 +74,16 @@ export function validateReleaseTag(options?: {
 
 export function parseNpmJson(stdout: string): unknown;
 
+export function validatePackedManifest(
+  source: PublicPackageManifest,
+  packed: PublicPackageManifest,
+): void;
+
+export function validateReleaseInventory(
+  directory: string,
+  tarballs: readonly string[],
+): Promise<void>;
+
 export function decidePublication(
   localIntegrity: string,
   registryIntegrity: string | null,

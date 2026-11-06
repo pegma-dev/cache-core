@@ -199,6 +199,58 @@ describe("Upstash Redis adapter", () => {
     expect(typeof seen?.args[1]).toBe("string");
   });
 
+  it("passes compare-and-delete through the Upstash eval signature", async () => {
+    const clock = createControllableClock(START);
+    const keyPrefix = nextPrefix();
+    const codec = jsonCodec<string>();
+    const address = { namespace: "ttl", key: "expired" };
+    let seen: { keys: string[]; args: unknown[] } | undefined;
+    const observing: UpstashRedisCacheClient = {
+      get: (key) => redis.get(key),
+      set: (key, value) => redis.set(key, value),
+      del: (...keys) => redis.del(...keys),
+      sadd: (key, ...members) => redis.sadd(key, ...members),
+      srem: (key, ...members) => redis.srem(key, ...members),
+      smembers: (key) => redis.smembers(key),
+      ping: () => redis.ping(),
+      async eval(script, keys, args) {
+        if (script.includes("DEL")) {
+          seen = { keys, args: [...args] };
+        }
+        return redis.eval(script, keys, args);
+      },
+    };
+    const store = createUpstashRedisCacheStore({
+      clock,
+      redis: observing,
+      keyPrefix,
+    });
+    await store.set(address, "old", codec, { ttl: { absoluteMs: 1_000 } });
+    clock.advance(1_000);
+    expect(await store.get(address, codec)).toEqual({ status: "miss" });
+    expect(seen?.keys).toEqual([`${keyPrefix}e:ttl:expired`]);
+    expect(seen?.args).toHaveLength(1);
+    expect(typeof seen?.args[0]).toBe("string");
+  });
+
+  it("uses the observed Upstash wire value for malformed cleanup", async () => {
+    const clock = createControllableClock(START);
+    const keyPrefix = nextPrefix();
+    const wireKey = `${keyPrefix}e:decode:noncanonical`;
+    await redis.set(wireKey, "YQ");
+    const store = createUpstashRedisCacheStore({ clock, redis, keyPrefix });
+
+    expect(
+      (
+        await store.get(
+          { namespace: "decode", key: "noncanonical" },
+          jsonCodec<string>(),
+        )
+      ).status,
+    ).toBe("error");
+    expect(await redis.get(wireKey)).toBeNull();
+  });
+
   it("rejects a keyPrefix that would steal the hash tag", () => {
     expect(() =>
       createUpstashRedisCacheStore({
@@ -207,5 +259,15 @@ describe("Upstash Redis adapter", () => {
         keyPrefix: "pre{fix}:",
       }),
     ).toThrow(/braces/u);
+  });
+
+  it("rejects an ill-formed Unicode keyPrefix", () => {
+    expect(() =>
+      createUpstashRedisCacheStore({
+        clock: createControllableClock(START),
+        redis,
+        keyPrefix: "prefix-\uD800",
+      }),
+    ).toThrow(/well-formed Unicode/u);
   });
 });

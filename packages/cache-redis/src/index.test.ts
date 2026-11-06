@@ -33,6 +33,10 @@ function proxyRedis(
   client: Redis,
   hooks: {
     afterGetBuffer?: () => Promise<void>;
+    beforeEval?: (
+      script: string,
+      args: readonly (string | Buffer | number)[],
+    ) => Promise<void>;
   } = {},
 ): RedisCacheClient {
   return {
@@ -47,7 +51,10 @@ function proxyRedis(
     srem: (key, ...members) => client.srem(key, ...members),
     smembers: (key) => client.smembers(key),
     ping: () => client.ping(),
-    eval: (script, numKeys, ...args) => client.eval(script, numKeys, ...args),
+    async eval(script, numKeys, ...args) {
+      await hooks.beforeEval?.(script, args);
+      return client.eval(script, numKeys, ...args);
+    },
   };
 }
 
@@ -111,7 +118,7 @@ describe("Redis adapter guarantees", () => {
     expect(await first.get(address, codec)).toEqual({ status: "miss" });
   });
 
-  it("does not let a later tag-array mutation poison the index", async () => {
+  it("does not let a later tag-array mutation desynchronize the index", async () => {
     const clock = createControllableClock(START);
     const store = createRedisCacheStore({
       clock,
@@ -325,6 +332,188 @@ describe("Redis adapter guarantees", () => {
     });
   });
 
+  it("keeps a newer entry when expired cleanup loses the comparison", async () => {
+    const clock = createControllableClock(START);
+    const keyPrefix = nextPrefix();
+    const codec = jsonCodec<string>();
+    const address = { namespace: "ttl", key: "cleanup-race" };
+    const writer = createRedisCacheStore({ clock, redis, keyPrefix });
+    await writer.set(address, "old", codec, {
+      ttl: { absoluteMs: 1_000 },
+      tags: ["old-tag"],
+    });
+    clock.advance(1_000);
+
+    let replaced = false;
+    const reader = createRedisCacheStore({
+      clock,
+      redis: proxyRedis(redis, {
+        async beforeEval(script) {
+          if (!replaced && script.includes("DEL")) {
+            replaced = true;
+            await writer.set(address, "new", codec, { tags: ["new-tag"] });
+          }
+        },
+      }),
+      keyPrefix,
+    });
+
+    expect(await reader.get(address, codec)).toEqual({ status: "miss" });
+    expect(await writer.get(address, codec)).toMatchObject({
+      status: "hit",
+      value: "new",
+    });
+    expect(await writer.invalidateTags(["old-tag"])).toEqual({
+      status: "hit",
+      value: 0,
+    });
+    expect(await writer.get(address, codec)).toMatchObject({
+      status: "hit",
+      value: "new",
+    });
+  });
+
+  it("keeps a newer entry when malformed cleanup loses the comparison", async () => {
+    const clock = createControllableClock(START);
+    const keyPrefix = nextPrefix();
+    const codec = jsonCodec<string>();
+    const address = { namespace: "decode", key: "malformed-race" };
+    const writer = createRedisCacheStore({ clock, redis, keyPrefix });
+    await redis.set(`${keyPrefix}e:decode:malformed-race`, Buffer.from("bad"));
+
+    let replaced = false;
+    const reader = createRedisCacheStore({
+      clock,
+      redis: proxyRedis(redis, {
+        async beforeEval(script) {
+          if (!replaced && script.includes("DEL")) {
+            replaced = true;
+            await writer.set(address, "new", codec, { tags: ["fresh"] });
+          }
+        },
+      }),
+      keyPrefix,
+    });
+
+    expect((await reader.get(address, codec)).status).toBe("error");
+    expect(await writer.get(address, codec)).toMatchObject({
+      status: "hit",
+      value: "new",
+    });
+  });
+
+  it("keeps a newer entry when codec cleanup loses the comparison", async () => {
+    const clock = createControllableClock(START);
+    const keyPrefix = nextPrefix();
+    const codec = jsonCodec<string>();
+    const address = { namespace: "decode", key: "codec-race" };
+    const writer = createRedisCacheStore({ clock, redis, keyPrefix });
+    await writer.set(address, "old", codec, { tags: ["old-tag"] });
+
+    let replaced = false;
+    const reader = createRedisCacheStore({
+      clock,
+      redis: proxyRedis(redis, {
+        async beforeEval(script) {
+          if (!replaced && script.includes("DEL")) {
+            replaced = true;
+            await writer.set(address, "new", codec, { tags: ["new-tag"] });
+          }
+        },
+      }),
+      keyPrefix,
+    });
+    const rejectingCodec = {
+      encode: codec.encode,
+      decode() {
+        throw new Error("cannot decode");
+      },
+    };
+
+    expect((await reader.get(address, rejectingCodec)).status).toBe("error");
+    expect(await writer.get(address, codec)).toMatchObject({
+      status: "hit",
+      value: "new",
+    });
+    expect(await writer.invalidateTags(["old-tag"])).toEqual({
+      status: "hit",
+      value: 0,
+    });
+  });
+
+  it("keeps a newer tagged entry when invalidation loses the comparison", async () => {
+    const clock = createControllableClock(START);
+    const keyPrefix = nextPrefix();
+    const codec = jsonCodec<string>();
+    const address = { namespace: "tags", key: "invalidation-race" };
+    const writer = createRedisCacheStore({ clock, redis, keyPrefix });
+    await writer.set(address, "old", codec, { tags: ["group"] });
+
+    let replaced = false;
+    const invalidator = createRedisCacheStore({
+      clock,
+      redis: proxyRedis(redis, {
+        async beforeEval(script) {
+          if (!replaced && script.includes("DEL")) {
+            replaced = true;
+            await writer.set(address, "new", codec, { tags: ["group"] });
+          }
+        },
+      }),
+      keyPrefix,
+    });
+
+    expect(await invalidator.invalidateTags(["group"])).toEqual({
+      status: "hit",
+      value: 0,
+    });
+    expect(await writer.get(address, codec)).toMatchObject({
+      status: "hit",
+      value: "new",
+    });
+    expect(await writer.invalidateTags(["group"])).toEqual({
+      status: "hit",
+      value: 1,
+    });
+  });
+
+  it("bounds cleanup retries while a sliding entry keeps changing", async () => {
+    const clock = createControllableClock(START);
+    const keyPrefix = nextPrefix();
+    const codec = jsonCodec<string>();
+    const address = { namespace: "tags", key: "sliding-retries" };
+    const writer = createRedisCacheStore({ clock, redis, keyPrefix });
+    await writer.set(address, "value", codec, {
+      tags: ["group"],
+      ttl: { slidingMs: 1_000 },
+    });
+
+    let deleteAttempts = 0;
+    const invalidator = createRedisCacheStore({
+      clock,
+      redis: proxyRedis(redis, {
+        async beforeEval(script) {
+          if (script.includes("DEL")) {
+            deleteAttempts += 1;
+            clock.advance(1);
+            await writer.get(address, codec);
+          }
+        },
+      }),
+      keyPrefix,
+    });
+
+    expect(await invalidator.invalidateTags(["group"])).toEqual({
+      status: "hit",
+      value: 0,
+    });
+    expect(deleteAttempts).toBe(4);
+    expect(await writer.get(address, codec)).toMatchObject({
+      status: "hit",
+      value: "value",
+    });
+  });
+
   it("does not delete a winning entry when a stale tag is invalidated", async () => {
     const clock = createControllableClock(START);
     const keyPrefix = nextPrefix();
@@ -386,5 +575,15 @@ describe("Redis adapter guarantees", () => {
         keyPrefix: "pre{fix}:",
       }),
     ).toThrow(/braces/u);
+  });
+
+  it("rejects an ill-formed Unicode keyPrefix", () => {
+    expect(() =>
+      createRedisCacheStore({
+        clock: createControllableClock(START),
+        redis,
+        keyPrefix: "prefix-\uD800",
+      }),
+    ).toThrow(/well-formed Unicode/u);
   });
 });

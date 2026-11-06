@@ -46,24 +46,31 @@ After that pull request is merged, create a signed annotated tag at the exact
 create the GitHub release with `--verify-tag`. Do not let GitHub create the tag
 and never move or recreate a release tag.
 
-The release workflow verifies that the tag:
+Before checkout, workflow-owned code verifies that the tag:
 
 - is a stable annotated `vX.Y.Z` tag signed by an allowed signer;
-- matches the package version;
 - points to the checkout and the GitHub release-event commit; and
 - is contained in `origin/main`.
 
+After checkout, preparation also verifies that the tag matches a public
+package version. Before publication, workflow-owned code repeats the tag
+checks and verifies the package version from the sealed manifest.
+
 Its preparation job has no OIDC permission. It installs the reviewed npm
 `11.18.0` release and the pinned pnpm without dependency caching, runs the
-full gate, builds and packs once with that npm CLI, smoke-tests the tarball
-from a clean consumer, records its SHA-1 and SHA-512 integrity, and uploads
-the exact prepared artifacts. The lockfile source of truth is `pnpm-lock.yaml`.
+full gate, builds and packs once with that npm CLI, revalidates each packed
+manifest, records SHA-1, SHA-256, and SHA-512 integrity, seals the exact
+release-directory inventory, and uploads only those prepared artifacts. The
+lockfile source of truth is `pnpm-lock.yaml`.
 
-Only the `npm-publish` job receives `id-token: write`. It installs no
-dependencies and does not download pnpm. It runs
-`node scripts/release-packages.mjs publish`, verifies the prepared manifest
-and tarball hashes against the release commit, and publishes those tarballs
-with npm provenance.
+A separate unprivileged job downloads the sealed artifact and installs and
+imports every tarball from a clean consumer directory. Only the
+`npm-publish` job receives `id-token: write`. It checks out no repository
+code, installs no project dependencies, and does not download pnpm. Its
+workflow-owned verifier re-authenticates the tag, verifies the prepared
+manifest digest, exact inventory, and tarball hashes against the release
+commit, then publishes from an empty temporary directory with isolated npm
+configuration and npm provenance.
 
 ## Safe retry
 

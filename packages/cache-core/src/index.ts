@@ -92,6 +92,38 @@ export class CacheKeyValidationError extends Error {
 
 const CONTROL = /[\u0000-\u001F\u007F]/u;
 
+/** Rejects strings that cannot be encoded to UTF-8 without replacement. */
+export function assertWellFormedCacheString(
+  value: string,
+  label: string,
+): void {
+  for (let index = 0; index < value.length; index += 1) {
+    const unit = value.charCodeAt(index);
+    if (unit >= 0xd800 && unit <= 0xdbff) {
+      const next = value.charCodeAt(index + 1);
+      if (!(next >= 0xdc00 && next <= 0xdfff)) {
+        throw new CacheKeyValidationError(
+          `${label} must contain well-formed Unicode`,
+        );
+      }
+      index += 1;
+    } else if (unit >= 0xdc00 && unit <= 0xdfff) {
+      throw new CacheKeyValidationError(
+        `${label} must contain well-formed Unicode`,
+      );
+    }
+  }
+}
+
+/** Validates and snapshots caller-owned tag arrays. */
+export function validateCacheTags(tags: readonly string[]): readonly string[] {
+  const validated = [...tags];
+  for (const tag of validated) {
+    assertWellFormedCacheString(tag, "tag");
+  }
+  return validated;
+}
+
 function requireToken(value: string, label: string): string {
   if (value.length === 0) {
     throw new CacheKeyValidationError(`${label} must not be empty`);
@@ -102,6 +134,7 @@ function requireToken(value: string, label: string): string {
   if (value.includes("{") || value.includes("}")) {
     throw new CacheKeyValidationError(`${label} must not contain braces`);
   }
+  assertWellFormedCacheString(value, label);
   return value;
 }
 
@@ -257,6 +290,10 @@ export async function runGetOrCompute<T>(
   options: RunGetOrComputeOptions<T>,
 ): Promise<CacheResult<T>> {
   const formatted = formatCacheKey(options.key);
+  const validatedOptions: RunGetOrComputeOptions<T> =
+    options.tags === undefined
+      ? options
+      : { ...options, tags: validateCacheTags(options.tags) };
   const fallback = options.fallback ?? "fail-closed";
   const random = options.random ?? Math.random;
   const getFlight = `${formatted}#get`;
@@ -294,7 +331,7 @@ export async function runGetOrCompute<T>(
         })
       ) {
         const recomputed = await options.singleFlight.do(computeFlight, () =>
-          computeAndStore(options, clockMs(options.clock)),
+          computeAndStore(validatedOptions, clockMs(options.clock)),
         );
         if (recomputed.status === "hit") {
           return recomputed;
@@ -316,7 +353,7 @@ export async function runGetOrCompute<T>(
   }
 
   return options.singleFlight.do(computeFlight, () =>
-    computeAndStore(options, clockMs(options.clock)),
+    computeAndStore(validatedOptions, clockMs(options.clock)),
   );
 }
 
@@ -459,12 +496,12 @@ export function createMemoryCacheStore(options: CacheDependencies): CacheStore {
     async set(key, value, codec, setOptions) {
       const formatted = formatCacheKey(key);
       const nowMs = clockMs(clock);
+      const tags = validateCacheTags(setOptions?.tags ?? []);
       const bytes = codec.encode(value).slice();
       const previous = entries.get(formatted);
       if (previous !== undefined) {
         forgetTags(formatted, previous.tags);
       }
-      const tags = [...(setOptions?.tags ?? [])];
       const deadlines = ttlDeadlines(nowMs, setOptions?.ttl);
       entries.set(formatted, {
         bytes,
@@ -516,8 +553,9 @@ export function createMemoryCacheStore(options: CacheDependencies): CacheStore {
     },
 
     async invalidateTags(tags) {
+      const validatedTags = validateCacheTags(tags);
       let removed = 0;
-      for (const tag of tags) {
+      for (const tag of validatedTags) {
         const keys = tagged.get(tag);
         if (keys === undefined) {
           continue;
@@ -557,13 +595,17 @@ export function createUnavailableCacheStore(
   const down = new Error("cache backend unavailable");
 
   const store: CacheStore = {
-    async get() {
+    async get(key) {
+      formatCacheKey(key);
       return { status: "error", error: down };
     },
-    async set() {
+    async set(key, _value, _codec, setOptions) {
+      formatCacheKey(key);
+      validateCacheTags(setOptions?.tags ?? []);
       return { status: "error", error: down };
     },
-    async delete() {
+    async delete(key) {
+      formatCacheKey(key);
       return { status: "error", error: down };
     },
     async getOrCompute<T>(
@@ -593,7 +635,8 @@ export function createUnavailableCacheStore(
           : { earlyExpiration: computeOptions.earlyExpiration }),
       });
     },
-    async invalidateTags() {
+    async invalidateTags(tags) {
+      validateCacheTags(tags);
       return { status: "error", error: down };
     },
     async ping() {

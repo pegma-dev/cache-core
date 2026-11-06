@@ -1,17 +1,16 @@
 import { spawnSync } from "node:child_process";
 import { createHash, timingSafeEqual } from "node:crypto";
 import {
-  mkdtemp,
   mkdir,
+  lstat,
   readFile,
   readdir,
-  rm,
   stat,
   writeFile,
 } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 
 const REPOSITORY_URL = "git+https://github.com/pegma-dev/cache-core.git";
 const NODE_RANGE = ">=22";
@@ -70,7 +69,7 @@ async function readJson(path) {
 }
 
 function sameJson(left, right) {
-  return JSON.stringify(left) === JSON.stringify(right);
+  return isDeepStrictEqual(left, right);
 }
 
 function safeEqual(left, right) {
@@ -351,24 +350,16 @@ function gitCommand() {
   return process.platform === "win32" ? "git.exe" : "git";
 }
 
+function tarCommand() {
+  return process.platform === "win32" ? "tar.exe" : "tar";
+}
+
 function hashTarball(bytes) {
   return {
+    sha256: createHash("sha256").update(bytes).digest("hex"),
     shasum: createHash("sha1").update(bytes).digest("hex"),
     integrity: `sha512-${createHash("sha512").update(bytes).digest("base64")}`,
   };
-}
-
-function exportSpecifiers(manifest) {
-  if (
-    manifest.exports === null ||
-    typeof manifest.exports !== "object" ||
-    Array.isArray(manifest.exports)
-  ) {
-    fail(`${manifest.name} must declare object-form exports`);
-  }
-  return Object.keys(manifest.exports).map((key) =>
-    key === "." ? manifest.name : `${manifest.name}${key.slice(1)}`,
-  );
 }
 
 function exportTargets(value) {
@@ -586,6 +577,23 @@ export async function validateRepository(options = {}) {
       fail("release preparation requires a clean checkout");
     }
   }
+  if (options.expectedReleaseCommit !== undefined) {
+    if (!/^[0-9a-f]{40,64}$/iu.test(options.expectedReleaseCommit)) {
+      fail("an exact release event commit is required");
+    }
+    const head = run(gitCommand(), ["rev-parse", "HEAD"], {
+      cwd: root,
+      capture: true,
+    }).stdout.trim();
+    if (
+      !safeEqual(
+        head.toLowerCase(),
+        options.expectedReleaseCommit.toLowerCase(),
+      )
+    ) {
+      fail("release checkout must match the release event commit");
+    }
+  }
   if (options.requireMainAncestor) {
     const head = run(gitCommand(), ["rev-parse", "HEAD"], {
       cwd: root,
@@ -654,39 +662,118 @@ function verifyPackedFiles(manifest, files) {
   }
 }
 
-async function smokeTestTarballs(root, packageRecords) {
-  const directory = await mkdtemp(join(tmpdir(), "pegma-release-smoke-"));
-  try {
-    await writeFile(
-      join(directory, "package.json"),
-      '{"name":"pegma-release-smoke","private":true,"type":"module"}\n',
+export function validatePackedManifest(source, packed) {
+  if (packed.name !== source.name || packed.version !== source.version) {
+    fail(`${source.name} packed manifest identity does not match its source`);
+  }
+  for (const hook of [
+    "preinstall",
+    "install",
+    "postinstall",
+    "prepublish",
+    "preprepare",
+    "prepare",
+    "postprepare",
+  ]) {
+    if (Object.hasOwn(packed.scripts ?? {}, hook)) {
+      fail(`${source.name} packed manifest must not define ${hook}`);
+    }
+  }
+  for (const section of [
+    "dependencies",
+    "devDependencies",
+    "optionalDependencies",
+    "peerDependencies",
+  ]) {
+    const sourcePins = Object.fromEntries(
+      Object.entries(source[section] ?? {}).filter(([name]) =>
+        name.startsWith("@pegma/"),
+      ),
     );
-    runNpm(
-      [
-        "install",
-        "--ignore-scripts",
-        "--no-audit",
-        "--no-fund",
-        "--package-lock=false",
-        ...packageRecords.map(({ tarballPath }) => tarballPath),
-      ],
-      { cwd: directory, capture: true },
+    const packedPins = Object.fromEntries(
+      Object.entries(packed[section] ?? {}).filter(([name]) =>
+        name.startsWith("@pegma/"),
+      ),
     );
-    for (const { manifest } of packageRecords) {
-      for (const specifier of exportSpecifiers(manifest)) {
-        run(
-          process.execPath,
-          [
-            "--input-type=module",
-            "--eval",
-            `await import(${JSON.stringify(specifier)})`,
-          ],
-          { cwd: directory, capture: true },
-        );
+    if (!sameJson(packedPins, sourcePins)) {
+      fail(`${source.name} packed manifest changed its ${section} pins`);
+    }
+    for (const [name, version] of Object.entries(packedPins)) {
+      if (typeof version !== "string" || !STABLE_SEMVER.test(version)) {
+        fail(`${source.name} packed manifest must exactly pin ${name}`);
       }
     }
-  } finally {
-    await rm(directory, { recursive: true, force: true });
+  }
+  const reviewedPackedFields = Object.fromEntries(
+    Object.keys(source).map((field) => [field, packed[field]]),
+  );
+  if (!sameJson(reviewedPackedFields, source)) {
+    fail(`${source.name} packed manifest does not match its reviewed source`);
+  }
+}
+
+function readPackedManifest(tarballPath) {
+  const extracted = run(
+    tarCommand(),
+    ["-xOf", tarballPath, "package/package.json"],
+    { capture: true },
+  ).stdout;
+  try {
+    return JSON.parse(extracted);
+  } catch {
+    fail(`${basename(tarballPath)} contains an invalid package manifest`);
+  }
+}
+
+function validatePackedArchive(manifest, tarballPath, npmFiles) {
+  const archiveEntries = run(tarCommand(), ["-tf", tarballPath], {
+    capture: true,
+  })
+    .stdout.split(/\r?\n/u)
+    .map((entry) => entry.replace(/^\.\//u, ""))
+    .filter((entry) => entry !== "" && !entry.endsWith("/"));
+  if (archiveEntries.some((entry) => !entry.startsWith("package/"))) {
+    fail(`${manifest.name} tarball contains an invalid archive path`);
+  }
+  const archivePaths = archiveEntries
+    .map((entry) => entry.slice("package/".length))
+    .sort();
+  const reportedPaths = npmFiles.map(({ path }) => path).sort();
+  if (!sameJson(archivePaths, reportedPaths)) {
+    fail(`${manifest.name} tarball inventory does not match npm pack metadata`);
+  }
+  verifyPackedFiles(
+    manifest,
+    archivePaths.map((path) => ({ path })),
+  );
+}
+
+export async function validateReleaseInventory(directory, tarballs) {
+  const directoryInfo = await lstat(directory);
+  if (directoryInfo.isSymbolicLink() || !directoryInfo.isDirectory()) {
+    fail("release output must be a regular directory");
+  }
+  const expected = ["package-manifest.json", ...tarballs].sort();
+  if (new Set(expected).size !== expected.length) {
+    fail("release inventory contains duplicate names");
+  }
+  const entries = await readdir(directory, { withFileTypes: true });
+  const actual = entries.map(({ name }) => name).sort();
+  if (!sameJson(actual, expected)) {
+    fail("release directory inventory does not match the prepared manifest");
+  }
+  for (const entry of entries) {
+    const info = await lstat(join(directory, entry.name));
+    if (
+      entry.name.startsWith(".") ||
+      !entry.isFile() ||
+      info.isSymbolicLink() ||
+      !info.isFile()
+    ) {
+      fail(
+        `release inventory entry must be a regular visible file: ${entry.name}`,
+      );
+    }
   }
 }
 
@@ -767,6 +854,8 @@ export async function prepareRelease(options = {}) {
     }
     verifyPackedFiles(manifest, packed.files);
     const tarballPath = join(output, basename(packed.filename));
+    validatePackedArchive(manifest, tarballPath, packed.files);
+    validatePackedManifest(manifest, readPackedManifest(tarballPath));
     const hashes = hashTarball(await readFile(tarballPath));
     if (
       !safeEqual(hashes.integrity, packed.integrity) ||
@@ -780,6 +869,7 @@ export async function prepareRelease(options = {}) {
       directory: definition.directory,
       tarball: basename(tarballPath),
       tarballPath,
+      sha256: hashes.sha256,
       integrity: hashes.integrity,
       shasum: hashes.shasum,
       publish: tagVersion === undefined || manifest.version === tagVersion,
@@ -789,8 +879,6 @@ export async function prepareRelease(options = {}) {
       manifest,
     });
   }
-  await smokeTestTarballs(root, records);
-
   if (releaseTag !== undefined) {
     for (const record of records.filter(({ publish }) => !publish)) {
       const registryIntegrity = queryRegistryIntegrity(
@@ -818,6 +906,10 @@ export async function prepareRelease(options = {}) {
   };
   const manifestPath = join(output, "package-manifest.json");
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  await validateReleaseInventory(
+    output,
+    records.map(({ tarball }) => tarball),
+  );
   return { manifestPath, manifest };
 }
 
@@ -846,6 +938,10 @@ async function verifyPreparedManifest(manifestPath) {
   if (!manifest.packages.some(({ publish }) => publish)) {
     fail("prepared package manifest has no release candidates");
   }
+  await validateReleaseInventory(
+    dirname(manifestPath),
+    manifest.packages.map(({ tarball }) => tarball),
+  );
   for (const [index, record] of manifest.packages.entries()) {
     const definition = RELEASE_PACKAGES[index];
     const expectedTarball = `${definition.name
@@ -856,6 +952,7 @@ async function verifyPreparedManifest(manifestPath) {
       record.tarball !== expectedTarball ||
       !STABLE_SEMVER.test(record.version) ||
       record.publish !== (record.version === tagVersion) ||
+      typeof record.sha256 !== "string" ||
       typeof record.integrity !== "string" ||
       typeof record.shasum !== "string" ||
       !Array.isArray(record.files)
@@ -868,6 +965,7 @@ async function verifyPreparedManifest(manifestPath) {
     }
     const hashes = hashTarball(await readFile(tarball));
     if (
+      !safeEqual(hashes.sha256, record.sha256) ||
       !safeEqual(hashes.integrity, record.integrity) ||
       !safeEqual(hashes.shasum, record.shasum)
     ) {
