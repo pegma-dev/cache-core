@@ -509,6 +509,12 @@ packages:
     expect(() =>
       validatePackedManifest(source, {
         ...structuredClone(source),
+        gitHead: "0123456789abcdef0123456789abcdef01234567",
+      }),
+    ).not.toThrow();
+    expect(() =>
+      validatePackedManifest(source, {
+        ...structuredClone(source),
         scripts: { install: "node install.mjs" },
       }),
     ).toThrow(/must not define install/u);

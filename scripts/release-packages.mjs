@@ -704,7 +704,10 @@ export function validatePackedManifest(source, packed) {
       }
     }
   }
-  if (!sameJson(packed, source)) {
+  const reviewedPackedFields = Object.fromEntries(
+    Object.keys(source).map((field) => [field, packed[field]]),
+  );
+  if (!sameJson(reviewedPackedFields, source)) {
     fail(`${source.name} packed manifest does not match its reviewed source`);
   }
 }
