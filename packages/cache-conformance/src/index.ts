@@ -130,6 +130,43 @@ export const conformanceCases: readonly ConformanceCase[] = [
     },
   ),
 
+  testCase("ill-formed Unicode tokens are rejected", async (store) => {
+    const malformed = "\uD800";
+    await assert.rejects(store.set(key(malformed, "key"), "value", codec));
+    await assert.rejects(store.set(key("ns", malformed), "value", codec));
+    await assert.rejects(
+      store.set(key("ns", "key", malformed), "value", codec),
+    );
+    await assert.rejects(
+      store.set(key("ns", "tagged"), "value", codec, {
+        tags: [malformed],
+      }),
+    );
+    await assert.rejects(store.invalidateTags([malformed]));
+  }),
+
+  testCase("well-formed Unicode tokens round-trip unchanged", async (store) => {
+    const address = key(
+      "namespace-\u{1F600}",
+      "key-\u{1D11E}",
+      "slot-\u{1F680}",
+    );
+    const tag = "tag-\u{1F30D}";
+    assert.equal(
+      (await store.set(address, "value", codec, { tags: [tag] })).status,
+      "hit",
+    );
+    const got = await store.get(address, codec);
+    assert.equal(got.status, "hit");
+    if (got.status === "hit") {
+      assert.equal(got.value, "value");
+    }
+    assert.deepEqual(await store.invalidateTags([tag]), {
+      status: "hit",
+      value: 1,
+    });
+  }),
+
   testCase(
     "absolute TTL expires against the injected Clock",
     async (store, context) => {

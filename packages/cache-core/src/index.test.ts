@@ -48,6 +48,30 @@ describe("formatCacheKey", () => {
       formatCacheKey({ namespace: "ns", key: `bad\u0000key` }),
     ).toThrow(CacheKeyValidationError);
   });
+
+  it("rejects unpaired UTF-16 surrogates in key tokens", () => {
+    for (const malformed of ["\uD800", "\uDFFF", "\uDC00\uD800"]) {
+      expect(() =>
+        formatCacheKey({ namespace: malformed, key: "key" }),
+      ).toThrow(CacheKeyValidationError);
+      expect(() => formatCacheKey({ namespace: "ns", key: malformed })).toThrow(
+        CacheKeyValidationError,
+      );
+      expect(() =>
+        formatCacheKey({ namespace: "ns", key: "key", hashTag: malformed }),
+      ).toThrow(CacheKeyValidationError);
+    }
+  });
+
+  it("preserves well-formed supplementary characters", () => {
+    expect(
+      formatCacheKey({
+        namespace: "sessions-\u{1F600}",
+        key: "key-\u{1D11E}",
+        hashTag: "user-\u{1F680}",
+      }),
+    ).toBe("{user-\u{1F680}}sessions-\u{1F600}:key-\u{1D11E}");
+  });
 });
 
 describe("codecs", () => {
@@ -159,7 +183,7 @@ describe("createMemoryCacheStore", () => {
     expect(second).toMatchObject({ status: "hit", value: "v2" });
   });
 
-  it("does not let a later tag-array mutation poison the index", async () => {
+  it("does not let a later tag-array mutation desynchronize the index", async () => {
     const clock = createControllableClock(START);
     const store = createMemoryCacheStore({ clock });
     const codec = jsonCodec<string>();
@@ -304,5 +328,25 @@ describe("runGetOrCompute fallback isolation", () => {
     expect(closed.status).toBe("error");
     expect(open).toMatchObject({ status: "hit", value: "from-origin" });
     expect(computes).toBe(1);
+  });
+});
+
+describe("createUnavailableCacheStore validation", () => {
+  it("rejects ill-formed Unicode before reporting backend status", async () => {
+    const store = createUnavailableCacheStore({
+      clock: createControllableClock(START),
+    });
+    const codec = jsonCodec<string>();
+    await expect(
+      store.get({ namespace: "ns", key: "\uD800" }, codec),
+    ).rejects.toThrow(CacheKeyValidationError);
+    await expect(
+      store.set({ namespace: "ns", key: "key" }, "value", codec, {
+        tags: ["\uDFFF"],
+      }),
+    ).rejects.toThrow(CacheKeyValidationError);
+    await expect(store.invalidateTags(["\uD800"])).rejects.toThrow(
+      CacheKeyValidationError,
+    );
   });
 });

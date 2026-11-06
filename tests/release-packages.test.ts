@@ -1,4 +1,11 @@
-import { existsSync, readFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 
@@ -11,6 +18,8 @@ import {
   parseNpmJson,
   parsePnpmLockfileImporters,
   resolvedVersionSatisfies,
+  validatePackedManifest,
+  validateReleaseInventory,
   validateRepository,
 } from "../scripts/release-packages.mjs";
 
@@ -461,6 +470,73 @@ packages:
       "sha512-cHJlcGFyZWQtdGFyYmFsbA==",
     );
   });
+
+  it("revalidates the manifest extracted from a packed archive", () => {
+    const source = {
+      name: "@pegma/cache-redis",
+      version: "0.1.1",
+      dependencies: {
+        "@pegma/cache-core": "0.1.1",
+        "@pegma/spine": "0.1.2",
+        ioredis: "^5.8.2",
+      },
+      scripts: { prepack: "tsc -p tsconfig.json" },
+    };
+    expect(() =>
+      validatePackedManifest(source, structuredClone(source)),
+    ).not.toThrow();
+    expect(() =>
+      validatePackedManifest(source, {
+        ...structuredClone(source),
+        scripts: { install: "node install.mjs" },
+      }),
+    ).toThrow(/must not define install/u);
+    expect(() =>
+      validatePackedManifest(source, {
+        ...structuredClone(source),
+        dependencies: {
+          ...source.dependencies,
+          "@pegma/cache-core": "^0.1.1",
+        },
+      }),
+    ).toThrow(/dependencies pins/u);
+    expect(() =>
+      validatePackedManifest(source, {
+        ...structuredClone(source),
+        dependencies: { ioredis: "^5.8.2" },
+      }),
+    ).toThrow(/dependencies pins/u);
+    expect(() =>
+      validatePackedManifest(source, {
+        ...structuredClone(source),
+        type: "commonjs",
+        dependencies: {
+          ...source.dependencies,
+          ioredis: "https://example.invalid/archive.tgz",
+        },
+      }),
+    ).toThrow(/reviewed source/u);
+  });
+
+  it("accepts only the sealed release directory inventory", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "pegma-release-test-"));
+    try {
+      writeFileSync(join(directory, "package-manifest.json"), "{}\n");
+      writeFileSync(join(directory, "pegma-cache-core-0.1.1.tgz"), "tarball");
+      await expect(
+        validateReleaseInventory(directory, ["pegma-cache-core-0.1.1.tgz"]),
+      ).resolves.toBeUndefined();
+      writeFileSync(
+        join(directory, ".npmrc"),
+        "registry=https://example.invalid\n",
+      );
+      await expect(
+        validateReleaseInventory(directory, ["pegma-cache-core-0.1.1.tgz"]),
+      ).rejects.toThrow(/inventory/u);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("release source authentication", () => {
@@ -475,28 +551,60 @@ describe("release source authentication", () => {
     const header = workflow.slice(0, jobsIndex);
     const jobs = workflow.slice(jobsIndex + jobsMarker.length);
     const prepareStart = jobs.indexOf("  prepare:");
+    const smokeStart = jobs.indexOf("\n  smoke:");
     const publishStart = jobs.indexOf("\n  publish:");
     expect(header).not.toContain("id-token: write");
     expect(prepareStart).toBeGreaterThanOrEqual(0);
-    expect(publishStart).toBeGreaterThan(prepareStart);
-    const prepare = jobs.slice(prepareStart, publishStart);
+    expect(smokeStart).toBeGreaterThan(prepareStart);
+    expect(publishStart).toBeGreaterThan(smokeStart);
+    const prepare = jobs.slice(prepareStart, smokeStart);
+    const smoke = jobs.slice(smokeStart, publishStart);
     const publish = jobs.slice(publishStart);
     expect(prepare).not.toContain("id-token: write");
-    expect(prepare).toContain("npm install --global npm@11.18.0");
+    expect(prepare).toContain("Authenticate the release tag");
+    expect(prepare.indexOf("Authenticate the release tag")).toBeLessThan(
+      prepare.indexOf("actions/checkout"),
+    );
+    expect(prepare).toContain("ref: ${{ github.sha }}");
+    expect(prepare).toContain("persist-credentials: false");
+    expect(prepare).toContain(
+      "npm install --global npm@11.18.0 --ignore-scripts",
+    );
     expect(prepare).toContain("pnpm run release:pack");
     expect(prepare).toContain("pnpm run test:redis");
     expect(prepare).toContain("pnpm run test:azure-redis");
     expect(prepare).toContain("pnpm run test:elasticache");
     expect(prepare).toContain("pnpm run test:upstash-redis");
     expect(prepare).toContain("16379:6379");
+    expect(prepare).toContain("manifest_digest:");
+    expect(prepare).toContain("include-hidden-files: false");
+    expect(smoke).toContain("needs: prepare");
+    expect(smoke).toContain("contents: read");
+    expect(smoke).not.toContain("id-token: write");
+    expect(smoke).not.toContain("actions/checkout");
+    expect(smoke).toContain("Install and import the prepared packages");
     expect(publish).toContain("id-token: write");
+    expect(publish).toContain("needs: [prepare, smoke]");
+    expect(publish).toContain("Re-authenticate the release tag");
+    expect(publish).not.toContain("actions/checkout");
     expect(publish).not.toContain("npm ci");
-    expect(publish).toContain("npm install --global npm@11.18.0");
+    expect(publish).toContain(
+      "npm install --global npm@11.18.0 --ignore-scripts",
+    );
     expect(publish).not.toContain("pnpm install");
     expect(publish).not.toContain("corepack");
     expect(publish).not.toContain("pnpm run");
     expect(publish).not.toContain("pnpm/action-setup");
-    expect(publish).toContain("node scripts/release-packages.mjs publish");
+    expect(publish).not.toContain("scripts/release-packages.mjs");
+    expect(publish).toContain(
+      "MANIFEST_DIGEST: ${{ needs.prepare.outputs.manifest_digest }}",
+    );
+    expect(publish).toContain('name.startsWith("ACTIONS_ID_TOKEN_")');
+    expect(publish).toContain("NPM_CONFIG_USERCONFIG");
+    expect(publish).toContain("NPM_CONFIG_GLOBALCONFIG");
+    expect(publish).toContain('"--tag",');
+    expect(publish).toContain('"--provenance",');
+    expect(publish).toContain('"--ignore-scripts",');
     expect(workflow).not.toContain("workflow_dispatch");
     expect(workflow).toContain("retention-days: 30");
   });
